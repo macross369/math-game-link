@@ -154,7 +154,7 @@
                 <button id="tab-btn-worksheet" onclick="switchMainTab('worksheet')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600">
                     <i class="fa-solid fa-file-pdf mr-1"></i> 題庫列印
                 </button>
-                <button id="tab-btn-competition" onclick="switchMainTab('competition')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-amber-700 hover:text-amber-800 bg-amber-50/80 border border-amber-200">
+                <button id="tab-btn-competition" onclick="switchMainTab('competition')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600">
                     <i class="fa-solid fa-trophy mr-1 text-amber-500"></i> 即時競賽擂台
                 </button>
             </div>
@@ -1049,7 +1049,7 @@
 
             btnInteractive.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
             btnWorksheet.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
-            btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-amber-600";
+            btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
 
             if (view === 'interactive') {
                 interactiveSec.classList.remove('hidden');
@@ -1063,7 +1063,7 @@
                 generateWorksheetPreview();
             } else if (view === 'competition') {
                 competitionSec.classList.remove('hidden');
-                btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-amber-500 text-white shadow-md";
+                btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md";
                 subTitle.innerText = "全班連線即時爭霸！答對 +1 分、答錯 -1 分，衝刺冠軍頒獎台！";
                 if (isAnswering) abortGame();
             } else if (view === 'teacher') {
