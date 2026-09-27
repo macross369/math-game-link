@@ -71,7 +71,6 @@
         let authReadyPromise = null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-challenge-app';
 
-        // 優先讀取環境變數，若無則讀取 localStorage 中的自訂配置 (方便 GitHub Pages 部署)
         let savedCustomConfig = null;
         try {
             const raw = localStorage.getItem('custom_math_firebase_config');
@@ -137,7 +136,7 @@
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex flex-col items-center justify-center p-3 md:p-6 text-gray-800">
 
-    <!-- 全域自訂美化提示訊息條 (徹底取代會被 iframe 封鎖的 alert) -->
+    <!-- 全域自訂美化提示訊息條 -->
     <div id="app-toast" class="fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-5 py-2.5 rounded-2xl text-xs md:text-sm font-bold shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
         <i id="app-toast-icon" class="fa-solid fa-circle-exclamation text-amber-400"></i>
         <span id="app-toast-text">提示訊息</span>
@@ -155,7 +154,6 @@
                 <button id="tab-btn-worksheet" onclick="switchMainTab('worksheet')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600">
                     <i class="fa-solid fa-file-pdf mr-1"></i> 題庫列印
                 </button>
-                <!-- 第三個分頁：即時競賽擂台 -->
                 <button id="tab-btn-competition" onclick="switchMainTab('competition')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-amber-700 hover:text-amber-800 bg-amber-50/80 border border-amber-200">
                     <i class="fa-solid fa-trophy mr-1 text-amber-500"></i> 即時競賽擂台
                 </button>
@@ -184,12 +182,12 @@
             <p id="app-subtitle" class="text-gray-500 mt-1.5 text-xs md:text-sm">四大主題大挑戰，支援語音辨識、螢幕大鍵盤與紙本測驗題庫匯出！</p>
         </div>
 
-        <!-- ================= 模式一：線上挑戰設定與作答 ================= -->
+        <!-- ================= 模式一：個人挑戰模式 ================= -->
         <div id="interactive-section">
             <!-- 畫面一：設定區 -->
             <div id="setup-screen" class="space-y-4">
                 <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-4">
-                    <!-- 四大主要主題選擇 (馬卡龍色系按鈕) -->
+                    <!-- 四大主要主題選擇 -->
                     <div>
                         <label class="block font-extrabold text-gray-800 text-sm mb-2">
                             <i class="fa-solid fa-book-open text-indigo-500 mr-1.5"></i> 選擇測驗主題：
@@ -218,9 +216,7 @@
                         <label class="block font-extrabold text-gray-800 text-sm mb-2">
                             <i class="fa-solid fa-layer-group text-indigo-500 mr-1.5"></i> 選擇類別與題型模式：
                         </label>
-                        <div class="grid grid-cols-1 gap-3" id="mode-container">
-                            <!-- 動態切換顯示 -->
-                        </div>
+                        <div class="grid grid-cols-1 gap-3" id="mode-container"></div>
                     </div>
 
                     <!-- 選擇秒數 -->
@@ -296,7 +292,7 @@
                     </div>
                 </div>
 
-                <!-- 控制按鈕列：暫停與中止 -->
+                <!-- 控制按鈕列 -->
                 <div class="grid grid-cols-2 gap-3 pt-1">
                     <button id="pause-btn" onclick="togglePause()" class="py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
                         <i class="fa-solid fa-pause"></i> 暫停遊戲
@@ -350,10 +346,10 @@
             </div>
         </div>
 
-        <!-- ================= 模式三：即時競賽擂台模式 (全新加入) ================= -->
+        <!-- ================= 模式三：即時競賽擂台模式 ================= -->
         <div id="competition-section" class="hidden space-y-4">
             
-            <!-- 視圖 A：競賽入口主選單 (選擇主持開台 or 學生加入) -->
+            <!-- 視圖 A：競賽入口主選單 -->
             <div id="comp-home-view" class="space-y-4">
                 <div class="bg-amber-50/70 p-5 rounded-3xl border border-amber-200 text-center space-y-2">
                     <div class="w-16 h-16 mx-auto bg-amber-100 rounded-full flex items-center justify-center text-3xl text-amber-600 shadow-inner">
@@ -404,7 +400,6 @@
                         </button>
                     </div>
 
-                    <!-- 比賽名稱 (選填) -->
                     <div>
                         <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
                             🏷️ 比賽名稱（可自訂或留空）：
@@ -412,7 +407,6 @@
                         <input type="text" id="arena-name-input" placeholder="例：三年二班乘法爭霸賽" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
                     </div>
 
-                    <!-- 選擇測驗主題與單元 -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         <div>
                             <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
@@ -429,13 +423,11 @@
                             <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
                                 📂 題型單元：
                             </label>
-                            <select id="arena-mode-select" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
-                                <!-- 動態填入 -->
-                            </select>
+                            <select id="arena-mode-select" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500"></select>
                         </div>
                     </div>
 
-                    <!-- 獲勝題數設定：預設 5題、10題、自訂 (上限 20) -->
+                    <!-- 獲勝題數設定 -->
                     <div>
                         <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1.5">
                             🎯 獲勝達標題數（先達到此分數者獲勝）：
@@ -464,7 +456,7 @@
                 </button>
             </div>
 
-            <!-- 視圖 C：老師等候大廳 (顯示 6 碼、QR 碼、已進入學生名單、開始按鈕) -->
+            <!-- 視圖 C：老師等候大廳 -->
             <div id="comp-lobby-view" class="hidden space-y-4">
                 <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-5 text-white shadow-lg text-center space-y-3">
                     <div id="lobby-arena-title" class="text-lg md:text-xl font-black">競賽擂台準備中</div>
@@ -472,7 +464,6 @@
                         單元：<span id="lobby-arena-unit">九九乘法</span> · 目標：<span id="lobby-arena-target" class="font-black text-amber-300">5</span> 題奪冠
                     </div>
 
-                    <!-- 房間 QR 碼與 6 碼大字 -->
                     <div class="bg-white text-gray-800 p-4 rounded-2xl max-w-sm mx-auto shadow-md space-y-3">
                         <div class="text-xs font-bold text-gray-500">掃描下方 QR 碼或輸入代碼進入：</div>
                         <div class="flex justify-center">
@@ -485,7 +476,6 @@
                     </div>
                 </div>
 
-                <!-- 已入場學生名單列表 -->
                 <div class="bg-white border rounded-2xl p-4 shadow-sm space-y-2">
                     <div class="flex justify-between items-center border-b pb-2">
                         <span class="text-xs md:text-sm font-extrabold text-gray-700">
@@ -525,7 +515,6 @@
                         </button>
                     </div>
 
-                    <!-- 擂台代碼輸入 -->
                     <div>
                         <label class="block font-bold text-xs text-gray-700 mb-1">
                             🔑 輸入擂台 6 碼代碼：
@@ -533,7 +522,6 @@
                         <input type="text" id="join-code-input" maxlength="6" placeholder="例如: 849201" class="w-full p-3 bg-white border border-gray-300 rounded-xl text-center text-2xl font-black tracking-widest text-indigo-600 uppercase focus:ring-2 focus:ring-indigo-500">
                     </div>
 
-                    <!-- 參賽選手姓名 (支援登入或直接輸入) -->
                     <div>
                         <label class="block font-bold text-xs text-gray-700 mb-1">
                             👤 參賽選手名稱（可直接輸入暱稱或以 Google 帳號帶入）：
@@ -568,22 +556,19 @@
                 </div>
             </div>
 
-            <!-- 視圖 F：學生比賽作答中畫面 (答對+1，答錯-1，最低0分) -->
+            <!-- 視圖 F：學生比賽作答中畫面 -->
             <div id="comp-student-play-view" class="hidden space-y-4">
-                <!-- 頂部即時比分與進度條 -->
                 <div class="bg-gray-50 p-3 rounded-2xl border space-y-1.5">
                     <div class="flex justify-between items-center text-xs md:text-sm font-bold">
                         <span class="text-gray-600">選手：<span id="student-play-name" class="text-indigo-700">--</span></span>
                         <span class="text-emerald-700 font-extrabold text-base">目前得分：<span id="student-my-score" class="text-2xl">0</span> 分</span>
                         <span class="text-amber-600">目標：<span id="student-target-score">5</span> 分</span>
                     </div>
-                    <!-- 達標進度條 -->
                     <div class="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
                         <div id="student-progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
                     </div>
                 </div>
 
-                <!-- 題卡區 -->
                 <div class="flex flex-col items-center justify-center py-7 bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl shadow-inner text-white relative">
                     <div class="text-4xl md:text-6xl font-black tracking-wider drop-shadow select-none" id="comp-card-question">
                         -- × -- = ?
@@ -593,7 +578,6 @@
                     </div>
                 </div>
 
-                <!-- 輸入與螢幕大鍵盤 -->
                 <div class="bg-gray-50 p-3 rounded-2xl border space-y-2.5">
                     <div class="flex justify-center items-center gap-2">
                         <input type="number" id="comp-manual-input" placeholder="答案" class="w-28 p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-center text-xl font-bold bg-white" onkeydown="if(event.key==='Enter') submitCompAnswer()">
@@ -619,7 +603,7 @@
                 </div>
             </div>
 
-            <!-- 視圖 G：老師監控戰況畫面 (含即時比分/隱藏比分開關) -->
+            <!-- 視圖 G：老師監控戰況畫面 -->
             <div id="comp-teacher-monitor-view" class="hidden space-y-4">
                 <div class="bg-gray-50 p-3.5 rounded-2xl border flex justify-between items-center flex-wrap gap-2">
                     <div>
@@ -627,7 +611,6 @@
                         <div class="text-sm font-black text-gray-800">目標分數：<span id="monitor-target" class="text-amber-600">5</span> 分</div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <!-- 隱藏/顯示即時比分開關 -->
                         <button id="toggle-score-visibility-btn" onclick="toggleScoresVisibility()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1">
                             <i class="fa-solid fa-eye-slash"></i> 隱藏比分（防干擾）
                         </button>
@@ -637,22 +620,18 @@
                     </div>
                 </div>
 
-                <!-- 戰況排行榜看板 -->
                 <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-3">
                     <div class="flex justify-between items-center text-xs font-bold text-gray-500 border-b pb-2">
                         <span>🔥 選手即時排名戰況</span>
                         <span id="score-visibility-label" class="text-emerald-600 font-black">【公開比分中】</span>
                     </div>
 
-                    <div id="monitor-player-board" class="space-y-2 max-h-72 overflow-y-auto">
-                        <!-- 即時產生各選手名條與進度條 -->
-                    </div>
+                    <div id="monitor-player-board" class="space-y-2 max-h-72 overflow-y-auto"></div>
                 </div>
             </div>
 
-            <!-- 視圖 H：頒獎台與結果表揚畫面 (第1名超大字外加金獎盃 + 2、3名階梯頒獎台) -->
+            <!-- 視圖 H：頒獎台與結果表揚畫面 -->
             <div id="comp-podium-view" class="hidden space-y-6">
-                <!-- 第一名冠絕全場超大字體與獎盃特寫 -->
                 <div class="text-center space-y-2 bg-gradient-to-b from-amber-50 to-yellow-100 p-6 rounded-3xl border-2 border-amber-300 shadow-md">
                     <div class="text-6xl md:text-7xl champion-trophy text-amber-500 inline-block drop-shadow-md">
                         🏆
@@ -666,14 +645,13 @@
                     </div>
                 </div>
 
-                <!-- 2、1、3名階梯式頒獎台 (Podium) -->
+                <!-- 階梯頒獎台 -->
                 <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-4">
                     <div class="text-center font-extrabold text-sm text-gray-700 border-b pb-2">
                         👑 擂台前三名頒獎典禮
                     </div>
                     
                     <div class="flex items-end justify-center gap-3 pt-6 pb-2 max-w-sm mx-auto">
-                        <!-- 第二名 (左側) -->
                         <div class="flex flex-col items-center flex-1">
                             <span class="text-xl mb-1">🥈</span>
                             <span id="podium-p2-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
@@ -683,7 +661,6 @@
                             </div>
                         </div>
 
-                        <!-- 第一名 (中間最高) -->
                         <div class="flex flex-col items-center flex-1">
                             <span class="text-2xl mb-1 champion-trophy">👑</span>
                             <span id="podium-p1-name" class="text-sm md:text-base font-black text-amber-800 truncate max-w-[90px]">--</span>
@@ -693,7 +670,6 @@
                             </div>
                         </div>
 
-                        <!-- 第三名 (右側) -->
                         <div class="flex flex-col items-center flex-1">
                             <span class="text-xl mb-1">🥉</span>
                             <span id="podium-p3-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
@@ -705,7 +681,7 @@
                     </div>
                 </div>
 
-                <!-- 全體選手成績排名總表 -->
+                <!-- 英雄榜 -->
                 <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-2">
                     <div class="text-xs md:text-sm font-extrabold text-gray-700 border-b pb-2 flex justify-between">
                         <span>📋 全體參賽選手英雄榜</span>
@@ -721,9 +697,7 @@
                                     <th class="p-2 font-bold text-right">榮譽稱號</th>
                                 </tr>
                             </thead>
-                            <tbody id="podium-all-table-body">
-                                <!-- 填入名次 -->
-                            </tbody>
+                            <tbody id="podium-all-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -740,7 +714,6 @@
         <!-- ================= 模式二：題庫下載／列印專區 ================= -->
         <div id="worksheet-section" class="hidden space-y-4">
             <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-4 no-print">
-                <!-- 下載型態切換：紙本測驗 vs 背誦模式 -->
                 <div>
                     <label class="block font-extrabold text-gray-800 text-sm mb-2">
                         <i class="fa-solid fa-sliders text-indigo-500 mr-1.5"></i> 選擇下載模式：
@@ -759,7 +732,6 @@
                     </div>
                 </div>
 
-                <!-- 選擇四大主題 -->
                 <div>
                     <label class="block font-extrabold text-gray-800 text-sm mb-2">
                         <i class="fa-solid fa-book-open text-indigo-500 mr-1.5"></i> 選擇題庫主題：
@@ -772,7 +744,6 @@
                     </div>
                 </div>
 
-                <!-- 選擇題型細項模式 -->
                 <div>
                     <label class="block font-extrabold text-gray-800 text-sm mb-2">
                         <i class="fa-solid fa-list-check text-indigo-500 mr-1.5"></i> 選擇題型單元：
@@ -780,7 +751,6 @@
                     <select id="ws-mode-select" onchange="generateWorksheetPreview()" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-sm text-gray-700"></select>
                 </div>
 
-                <!-- 題目排序選項 -->
                 <div class="flex items-center justify-between text-xs text-gray-600 bg-white p-2.5 rounded-xl border border-gray-200">
                     <span class="font-bold flex items-center gap-1.5"><i class="fa-solid fa-shuffle text-indigo-500"></i> 題目出題順序：</span>
                     <div class="flex items-center gap-4 font-semibold">
@@ -794,7 +764,6 @@
                 </div>
             </div>
 
-            <!-- 操作動作列 -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 no-print">
                 <button onclick="downloadWorksheetPDF()" class="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2">
                     <i class="fa-solid fa-file-arrow-down"></i> 下載題庫 PDF 檔
@@ -804,7 +773,6 @@
                 </button>
             </div>
 
-            <!-- 題庫預覽／列印區域 (A4 優化紙張質感) -->
             <div class="bg-gray-100 p-2 md:p-3 rounded-2xl border border-gray-300">
                 <div class="text-xs text-gray-500 font-bold mb-1.5 flex items-center justify-between px-1 no-print">
                     <span>📄 題庫即時預覽 (共 <span id="ws-preview-count" class="text-indigo-600 font-extrabold">0</span> 題)</span>
@@ -812,7 +780,6 @@
                 </div>
 
                 <div id="worksheet-print-area" class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-gray-200 text-gray-900 mx-auto">
-                    <!-- 卷頭資訊 -->
                     <div class="border-b-2 border-gray-800 pb-3 mb-4">
                         <div class="flex justify-between items-start">
                             <div>
@@ -828,7 +795,6 @@
                             </div>
                         </div>
 
-                        <!-- 學生填寫欄位 (若是背誦卷則自動隱藏成績欄) -->
                         <div id="ws-student-meta-bar" class="flex flex-wrap items-center gap-4 md:gap-8 mt-3 text-xs md:text-sm font-bold text-gray-700 pt-2 border-t border-dashed border-gray-300">
                             <div>班級：__________</div>
                             <div>座號：______</div>
@@ -839,10 +805,8 @@
                         </div>
                     </div>
 
-                    <!-- 題目容器 (逐列 3 欄排版) -->
                     <div id="ws-questions-container" class="space-y-2 text-sm md:text-base font-semibold"></div>
 
-                    <!-- 頁尾說明 -->
                     <div class="border-t border-gray-300 mt-6 pt-3 text-[11px] text-gray-400 flex justify-between items-center">
                         <span>數學計算能力挑戰王 · 學習成長評量單</span>
                         <span>第 1 頁 / 共 1 頁</span>
@@ -941,6 +905,25 @@
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
                                 <tr class="bg-gray-100 text-gray-700 border-b">
+                                    <th class="p-2 font-bold whitespace-nowrap">測驗時間</th>
+                                    <th class="p-2 font-bold">學生姓名</th>
+                                    <th class="p-2 font-bold">信箱</th>
+                                    <th class="p-2 font-bold">單元題型</th>
+                                    <th class="p-2 font-bold text-center">秒數</th>
+                                    <th class="p-2 font-bold text-center">答對/總數</th>
+                                    <th class="p-2 font-bold text-center">得分率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scores-table-body">
+                                <tr>
+                                    <td colspan="7" class="p-4 text-center text-gray-400">尚無測驗紀錄</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- 子分頁三：GitHub / Firebase 專案配置 -->
             <div id="admin-view-firebase" class="hidden space-y-4">
                 <div class="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-3 text-xs md:text-sm">
@@ -961,7 +944,7 @@
             </div>
         </div>
 
-        <!-- 老師登入後台自訂彈窗 (密碼 Rccbok6869，無提示) -->
+        <!-- 老師登入後台自訂彈窗 -->
         <div id="teacher-pwd-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border space-y-4">
                 <div class="flex items-center gap-2 text-gray-800">
@@ -1009,7 +992,7 @@
         let currentWorksheetTopic = 'multiply';
 
         // 競賽擂台狀態
-        let arenaState = null; // 當前擂台資料
+        let arenaState = null;
         let currentArenaId = null;
         let myPlayerId = 'p_' + Math.random().toString(36).substring(2, 9);
         let myPlayerName = '參賽選手';
@@ -1023,7 +1006,7 @@
 
         // WebRTC P2P (PeerJS) 跨裝置即時通訊實體
         let hostPeer = null;
-        let hostConnections = {}; // 連線的學生字典 { connId: conn }
+        let hostConnections = {};
         let clientPeer = null;
         let clientConn = null;
 
@@ -1032,7 +1015,6 @@
             initWorksheetSection();
             updateArenaModeOptions();
 
-            // 若 URL 中帶有 arenaCode 參數則自動填入加入框
             const urlParams = new URLSearchParams(window.location.search);
             const arenaParam = urlParams.get('arena');
             if (arenaParam) {
@@ -1041,7 +1023,6 @@
                 document.getElementById('join-code-input').value = arenaParam;
             }
 
-            // 監聽跨分頁廣播 (離線或本地多視窗同步降級機制)
             if (broadcastChannel) {
                 broadcastChannel.onmessage = (event) => {
                     handleLocalBroadcast(event.data);
@@ -1049,7 +1030,7 @@
             }
         };
 
-        // ================== 集中管理的全域視圖切換器 (徹底解決畫面重疊與遺漏) ==================
+        // 集中管理的全域視圖切換器
         function setActiveView(view) {
             const interactiveSec = document.getElementById('interactive-section');
             const worksheetSec = document.getElementById('worksheet-section');
@@ -1061,13 +1042,11 @@
             const btnCompetition = document.getElementById('tab-btn-competition');
             const subTitle = document.getElementById('app-subtitle');
 
-            // 全部強制隱藏
             interactiveSec.classList.add('hidden');
             worksheetSec.classList.add('hidden');
             competitionSec.classList.add('hidden');
             teacherSec.classList.add('hidden');
 
-            // 重置按鈕外觀
             btnInteractive.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
             btnWorksheet.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
             btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-amber-600";
@@ -1101,7 +1080,6 @@
             setActiveView(tab);
         }
 
-        // ================== 即時競賽擂台專用介面切換 ==================
         function hideAllCompViews() {
             document.getElementById('comp-home-view').classList.add('hidden');
             document.getElementById('comp-create-view').classList.add('hidden');
@@ -1159,12 +1137,12 @@
             }
         }
 
-        // ================== 建立擂台與加入擂台邏輯 ==================
+        // 建立擂台與加入擂台邏輯
         async function createArenaSubmit() {
             const arenaName = document.getElementById('arena-name-input').value.trim() || '數學計算爭霸擂台';
             const topic = document.getElementById('arena-topic-select').value;
             const mode = document.getElementById('arena-mode-select').value;
-            const modeName = document.getElementById('arena-mode-select').selectedOptions[0]?.text.split('(')[0].trim();
+            const modeName = document.getElementById('arena-mode-select').selectedOptions[0]?.text.split('(')[0].trim() || '預設單元';
             
             let targetScore = 5;
             const targetRadio = document.querySelector('input[name="arenaTarget"]:checked').value;
@@ -1172,10 +1150,9 @@
             else if (targetRadio === '10') targetScore = 10;
             else {
                 const customVal = parseInt(document.getElementById('arena-custom-target').value, 10);
-                targetScore = Math.min(Math.max(isNaN(customVal) ? 5 : customVal, 1), 20); // 嚴格上限 20
+                targetScore = Math.min(Math.max(isNaN(customVal) ? 5 : customVal, 1), 20);
             }
 
-            // 產生 6 位數純數字擂台碼
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             currentArenaId = code;
             isTeacherHost = true;
@@ -1187,29 +1164,23 @@
                 mode: mode,
                 modeName: modeName,
                 targetScore: targetScore,
-                status: 'waiting', // waiting | playing | ended
+                status: 'waiting',
                 createdAt: new Date().toISOString(),
                 players: {},
                 winner: null
             };
 
-            // 準備題目集
             compQuestionPool = buildQuestionsByMode(topic, mode);
 
-            // 啟動 WebRTC 房間主機節點
             initHostPeer(code);
-
-            // 儲存至 Firebase (若有連線) 並進行廣播
             saveArenaState(arenaState);
             listenToArena(currentArenaId);
 
-            // 更新老師等候大廳畫面
             document.getElementById('lobby-arena-title').innerText = arenaName;
             document.getElementById('lobby-arena-unit').innerText = `${worksheetMeta[topic].title} · ${modeName}`;
             document.getElementById('lobby-arena-target').innerText = targetScore;
             document.getElementById('lobby-arena-code').innerText = code;
 
-            // 產生 QR Code 圖片網址
             const joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
             const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`;
             document.getElementById('lobby-qrcode-img').src = qrApiUrl;
@@ -1218,11 +1189,10 @@
             document.getElementById('comp-lobby-view').classList.remove('hidden');
         }
 
-        // 老師主機 WebRTC 建立
         function initHostPeer(code) {
             try {
                 if (window.Peer) {
-                    if (hostPeer) { hostPeer.destroy(); hostPeer = null; }
+                    if (hostPeer) { try { hostPeer.destroy(); } catch(e){} hostPeer = null; }
                     hostConnections = {};
                     hostPeer = new Peer(`matharena-${code}`);
                     
@@ -1230,6 +1200,11 @@
                         hostConnections[conn.peer] = conn;
                         conn.on('data', (msg) => handleHostPeerMessage(conn, msg));
                         conn.on('close', () => { delete hostConnections[conn.peer]; });
+                        conn.on('error', () => { delete hostConnections[conn.peer]; });
+                    });
+
+                    hostPeer.on('error', (err) => {
+                        console.warn("PeerJS 主機提示:", err);
                     });
                 }
             } catch (err) {
@@ -1242,9 +1217,7 @@
             if (msg.type === 'JOIN_ARENA') {
                 if (!arenaState.players) arenaState.players = {};
                 arenaState.players[msg.player.id] = msg.player;
-                // 回覆學生最新房間狀態
                 conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState });
-                // 廣播給其他所有已連線學生
                 broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
                 onArenaDataUpdated(arenaState);
             } else if (msg.type === 'SCORE_UPDATE') {
@@ -1268,7 +1241,6 @@
             saveArenaState(arenaState);
         }
 
-        // 學生加入擂台單一且穩健的邏輯 (移除重複宣告與錯誤彈窗)
         async function joinArenaSubmit() {
             const codeInput = document.getElementById('join-code-input').value.trim();
             const nameInput = document.getElementById('join-name-input').value.trim() || '無名選手';
@@ -1292,15 +1264,13 @@
                 joinedAt: new Date().toISOString()
             };
 
-            // 確保 Firebase Auth 已完成授權
             if (window._fb?.authReadyPromise) {
                 await window._fb.authReadyPromise;
             }
 
-            // 1. 透過 WebRTC (PeerJS) 跨裝置直連進入擂台
             if (window.Peer) {
                 try {
-                    if (clientPeer) { clientPeer.destroy(); clientPeer = null; }
+                    if (clientPeer) { try { clientPeer.destroy(); } catch(e){} clientPeer = null; }
                     clientPeer = new Peer();
                     clientPeer.on('open', () => {
                         clientConn = clientPeer.connect(`matharena-${currentArenaId}`, { reliable: true });
@@ -1318,12 +1288,10 @@
                 }
             }
 
-            // 2. 廣播通道握手 (本機多開即刻連線)
             if (broadcastChannel) {
                 broadcastChannel.postMessage({ type: 'REQUEST_ROOM_SYNC', arenaId: currentArenaId, player: playerData });
             }
 
-            // 3. 連線輪詢嘗試 (給予 1.5 秒緩衝期讓 Firebase / PeerJS 握手完成)
             let attempts = 0;
             const maxAttempts = 6;
             const checkInterval = setInterval(async () => {
@@ -1361,7 +1329,6 @@
             window.open(url, '_blank');
         }
 
-        // ================== 即時同步與監聽引擎 (Firebase Firestore + BroadcastChannel) ==================
         function saveArenaState(state) {
             if (window._fb && window._fb.db) {
                 const { db, appId, doc, setDoc } = window._fb;
@@ -1442,29 +1409,27 @@
                 if (currentArenaId === msg.data.id) {
                     onArenaDataUpdated(msg.data);
                 }
+            } else if (msg.type === 'ARENA_DISMISSED' && currentArenaId === msg.arenaId) {
+                showToast("擂台已被老師解散！");
+                showCompHomeView();
             }
         }
 
-        // 核心更新回調：擂台狀態演進 (waiting -> playing -> ended)
         function onArenaDataUpdated(data) {
             arenaState = data;
 
-            // 1. 等候大廳更新學生名單 (老師視角)
             if (isTeacherHost && arenaState.status === 'waiting') {
                 renderLobbyPlayers(arenaState.players || {});
             }
 
-            // 2. 狀態由 waiting 轉為 playing
             if (arenaState.status === 'playing') {
                 if (isTeacherHost) {
-                    // 老師切換至即時監控畫面
                     hideAllCompViews();
                     document.getElementById('comp-teacher-monitor-view').classList.remove('hidden');
                     document.getElementById('monitor-code').innerText = arenaState.id;
                     document.getElementById('monitor-target').innerText = arenaState.targetScore;
                     renderMonitorBoard(arenaState.players || {});
                 } else {
-                    // 學生切換至答題畫面
                     hideAllCompViews();
                     document.getElementById('comp-student-play-view').classList.remove('hidden');
                     document.getElementById('student-play-name').innerText = myPlayerName;
@@ -1479,12 +1444,10 @@
                 }
             }
 
-            // 3. 即時比分監控更新 (老師視角)
             if (isTeacherHost && arenaState.status === 'playing') {
                 renderMonitorBoard(arenaState.players || {});
             }
 
-            // 4. 比賽結束：第一名達標，展示冠軍大獎盃與階梯頒獎台 (雙方皆看見)
             if (arenaState.status === 'ended') {
                 renderPodiumAndResults(arenaState);
             }
@@ -1523,10 +1486,19 @@
         }
 
         function dismissArena() {
-            if (hostPeer) { hostPeer.destroy(); hostPeer = null; }
-            if (clientPeer) { clientPeer.destroy(); clientPeer = null; }
-            if (arenaUnsubscribe) arenaUnsubscribe();
-        // ================== 學生作答邏輯 (修正 target 未定義 bug) ==================
+            if (hostPeer) { try { hostPeer.destroy(); } catch(e){} hostPeer = null; }
+            if (clientPeer) { try { clientPeer.destroy(); } catch(e){} clientPeer = null; }
+            if (arenaUnsubscribe) { arenaUnsubscribe(); arenaUnsubscribe = null; }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'ARENA_DISMISSED', arenaId: currentArenaId });
+            }
+            arenaState = null;
+            currentArenaId = null;
+            isTeacherHost = false;
+            showCompHomeView();
+            showToast("擂台已成功解散！", true);
+        }
+
         function nextCompQuestion() {
             if (!compQuestionPool || compQuestionPool.length === 0) {
                 compQuestionPool = buildQuestionsByMode(arenaState?.topic || 'multiply', arenaState?.mode || 'mul-9x9-standard');
@@ -1559,16 +1531,14 @@
                 myCurrentScore += 1;
                 feedbackElem.innerHTML = `<span class="text-green-300 font-black">答對！+1 分 ⭕</span>`;
             } else {
-                myCurrentScore = Math.max(0, myCurrentScore - 1); // 答錯扣 1 分，底限為 0 分
+                myCurrentScore = Math.max(0, myCurrentScore - 1);
                 feedbackElem.innerHTML = `<span class="text-red-300 font-black">答錯！-1 分 ❌ (最低0分)</span>`;
             }
 
-            // 更新個人畫面比分與進度條
             document.getElementById('student-my-score').innerText = myCurrentScore;
             const progress = Math.min(100, Math.round((myCurrentScore / targetScore) * 100));
             document.getElementById('student-progress-bar').style.width = `${progress}%`;
 
-            // 同步分數至雲端/WebRTC直連/廣播
             if (clientConn && clientConn.open) {
                 clientConn.send({ type: 'SCORE_UPDATE', playerId: myPlayerId, score: myCurrentScore });
             }
@@ -1580,7 +1550,6 @@
                 updateArenaPlayer(currentArenaId, myPlayerId, arenaState.players[myPlayerId]);
             }
 
-            // 檢查是否達到獲勝題數
             if (myCurrentScore >= targetScore) {
                 arenaState.status = 'ended';
                 arenaState.winner = { id: myPlayerId, name: myPlayerName, score: myCurrentScore };
@@ -1592,7 +1561,6 @@
             setTimeout(nextCompQuestion, 400);
         }
 
-        // ================== 老師監控戰況與排行榜渲染 ==================
         function toggleScoresVisibility() {
             hideScoresOnMonitor = !hideScoresOnMonitor;
             const btn = document.getElementById('toggle-score-visibility-btn');
@@ -1615,7 +1583,6 @@
         function stopArenaMatchManual() {
             if (!arenaState) return;
             arenaState.status = 'ended';
-            // 找出目前最高分者
             const players = Object.values(arenaState.players || {}).sort((a,b) => b.score - a.score);
             arenaState.winner = players[0] || { name: '無', score: 0 };
             saveArenaState(arenaState);
@@ -1658,7 +1625,6 @@
             });
         }
 
-        // ================== 頒獎台與結果英雄榜渲染 (第1名超大字外加金獎盃 + 2、3名階梯) ==================
         function renderPodiumAndResults(arenaData) {
             hideAllCompViews();
             document.getElementById('comp-podium-view').classList.remove('hidden');
@@ -1668,11 +1634,9 @@
             const second = players[1] || { name: '從缺', score: 0 };
             const third = players[2] || { name: '從缺', score: 0 };
 
-            // 第一名巨大表揚區
             document.getElementById('podium-first-huge-name').innerText = first.name;
             document.getElementById('podium-first-score-tag').innerText = `以 ${first.score} 分率先達標奪得擂台盟主！`;
 
-            // 頒獎台三位選手名條
             document.getElementById('podium-p1-name').innerText = first.name;
             document.getElementById('podium-p1-score').innerText = `${first.score} 分`;
 
@@ -1682,7 +1646,6 @@
             document.getElementById('podium-p3-name').innerText = third.name;
             document.getElementById('podium-p3-score').innerText = third.name === '從缺' ? '-' : `${third.score} 分`;
 
-            // 全體排名列表
             const tbody = document.getElementById('podium-all-table-body');
             tbody.innerHTML = '';
             players.forEach((p, idx) => {
@@ -1705,7 +1668,6 @@
             });
         }
 
-        // 自訂無阻塞通知條 (替代瀏覽器 alert)
         let toastTimeout = null;
         function showToast(msg, isSuccess = false) {
             const toast = document.getElementById('app-toast');
@@ -1729,7 +1691,6 @@
             }, 2500);
         }
 
-        // ================== 模式一：遊戲邏輯與主題樣式 ==================
         function updateModeOptions() {
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const container = document.getElementById('mode-container');
@@ -1949,7 +1910,6 @@
             }
         }
 
-        // 題目生成通用器
         function buildQuestionsByMode(topic, mode) {
             let list = [];
             if (topic === 'multiply') {
@@ -2003,7 +1963,7 @@
             return list;
         }
 
-        // ================== 模式二：題庫下載／列印 ==================
+        // 題庫模式設定與預覽
         const worksheetMeta = {
             multiply: {
                 title: '乘法運算',
@@ -2195,7 +2155,6 @@
             }, 200);
         }
 
-        // ================== 模式一：遊戲單人挑戰核心邏輯 ==================
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
@@ -2569,7 +2528,6 @@
             document.getElementById('setup-screen').classList.remove('hidden');
         }
 
-        // ================== 教師後台密碼與身分管理 ==================
         function openTeacherLoginModal() {
             document.getElementById('teacher-pwd-input').value = '';
             document.getElementById('teacher-pwd-msg').classList.add('hidden');
@@ -2587,7 +2545,7 @@
 
         function verifyTeacherPassword() {
             const input = document.getElementById('teacher-pwd-input').value;
-            if (input === 'Rccbok6869') { // 密碼嚴格符合無提示
+            if (input === 'Rccbok6869') {
                 closeTeacherPasswordModal();
                 showTeacherDashboard();
             } else {
@@ -2622,7 +2580,6 @@
             } else if (subtab === 'firebase') {
                 firebaseBtn.className = "pb-2 text-amber-600 border-b-2 border-amber-600 px-3 font-black";
                 firebaseView.classList.remove('hidden');
-                // 回填目前設定
                 const raw = localStorage.getItem('custom_math_firebase_config');
                 if (raw) document.getElementById('firebase-config-textarea').value = raw;
             }
@@ -2658,6 +2615,7 @@
             document.getElementById('roster-name-input').value = '';
             document.getElementById('roster-email-input').value = '';
             renderRosterTable(localRoster);
+            showToast("學生已成功加入名冊！", true);
         }
 
         async function loadRosterList() {
@@ -2773,7 +2731,6 @@
             }
         }
 
-        // ================== 學生 Google 登入驗證 ==================
         window.onFirebaseUserChange = function(user) {
             currentAuthUser = user;
             updateStudentAuthUI(user);
