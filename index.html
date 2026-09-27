@@ -62,7 +62,7 @@
 
     <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-5 md:p-8 transition-all duration-300 my-auto relative">
         
-        <!-- 頂端操作列：身分徽章與導航頁籤 -->
+        <!-- 頂端操作列：身分徽章與教師後台 -->
         <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4 no-print border-b pb-3">
             <!-- 學生身分與登入狀態 -->
             <div id="auth-status-bar" class="flex items-center gap-2 text-xs">
@@ -99,7 +99,7 @@
             <h1 class="text-2xl md:text-3xl font-extrabold text-indigo-600 flex items-center justify-center gap-2">
                 <i class="fa-solid fa-crown text-yellow-500"></i> 數學計算能力挑戰王
             </h1>
-            <p id="app-subtitle" class="text-gray-500 mt-1.5 text-xs md:text-sm">四大主題大挑戰，支援語音辨識、螢幕大鍵盤、雲端紀錄與即時對戰！</p>
+            <p id="app-subtitle" class="text-gray-500 mt-1.5 text-xs md:text-sm">四大主題大挑戰，支援語音辨識、螢幕大鍵盤、紙本題庫與多人即時競賽！</p>
         </div>
 
         <!-- ================= 模式一：個人挑戰模式 ================= -->
@@ -192,7 +192,7 @@
                         <span class="text-gray-400">可用螢幕鍵盤作答</span>
                     </div>
                     
-                    <!-- 精簡手動輸入框與送出按鈕 (靠中排版) -->
+                    <!-- 精簡手動輸入框與送出按鈕 (約5個字符寬度，緊湊排列) -->
                     <div class="flex justify-center items-center gap-2">
                         <input type="number" id="manual-input" placeholder="答案" class="w-28 p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center text-xl font-bold bg-white" onkeydown="if(event.key==='Enter') submitManualAnswer()">
                         <button onclick="submitManualAnswer()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition flex items-center gap-1.5 shrink-0">
@@ -341,7 +341,7 @@
                 </button>
             </div>
 
-            <!-- 題庫預覽區塊 (防跑版標準三欄排版) -->
+            <!-- 題庫預覽區塊 (防跑版標準三欄排版，括號與答案緊接在等號後方) -->
             <div class="bg-gray-100 p-2 md:p-3 rounded-2xl border border-gray-300">
                 <div class="text-xs text-gray-500 font-bold mb-1.5 flex items-center justify-between px-1 no-print">
                     <span>📄 題庫即時預覽 (共 <span id="ws-preview-count" class="text-indigo-600 font-extrabold">0</span> 題)</span>
@@ -449,7 +449,7 @@
                         </div>
                     </div>
 
-                    <!-- 獲勝達標題數 (修復連動顯示問題) -->
+                    <!-- 獲勝達標題數 -->
                     <div>
                         <label class="block font-bold text-xs text-gray-700 mb-1">🎯 獲勝達標題數：</label>
                         <div class="grid grid-cols-3 gap-2 text-xs">
@@ -733,6 +733,11 @@
                     </div>
                 </div>
 
+                <!-- 學生端專用：原擂台等待下一輪提示 -->
+                <div id="student-rematch-waiting-notice" class="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-center text-xs text-indigo-700 font-bold flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-hourglass-half animate-spin text-amber-500"></i> 原擂台已保留！請留在本頁面，老師發起新一輪後將自動換題開戰
+                </div>
+
                 <!-- 底部按鈕區 (老師可原房續賽，學生可返回) -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                     <button onclick="showCompHomeView()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
@@ -948,7 +953,6 @@
     </div>
 
     <script>
-        // ================== 全域狀態與初始化 ==================
         let activeTab = 'interactive'; // 'interactive' | 'worksheet' | 'comp'
         let currentStudent = { name: '訪客選手', email: null, isGuest: true };
 
@@ -1102,32 +1106,31 @@
             };
 
             topics.forEach(t => {
-                <!-- 全體選手積分排行榜 -->
-                <div class="space-y-2">
-                    <h4 class="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                        <i class="fa-solid fa-list-ol text-indigo-600"></i> 全場排行榜
-                    </h4>
-                    <div id="arena-leaderboard-list" class="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-gray-50 rounded-2xl border text-xs">
-                        <!-- 動態填入排行榜 -->
-                    </div>
-                </div>
+                const labelElem = document.getElementById(`topic-label-${t}`);
+                if (labelElem) {
+                    labelElem.className = (t === topic) ? 
+                        `flex items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${colorMap[t].active}` :
+                        `flex items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${colorMap[t].inactive}`;
+                }
+            });
 
-                <!-- 學生端專用：原擂台等待下一輪提示 -->
-                <div id="student-rematch-waiting-notice" class="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-center text-xs text-indigo-700 font-bold flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-hourglass-half animate-spin text-amber-500"></i> 原擂台已保留！請留在本頁面，老師發起新一輪後將自動換題開戰
-                </div>
+            const currentTheme = colorMap[topic];
 
-                <!-- 底部按鈕區 (老師可原房續賽，學生可返回) -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <button onclick="showCompHomeView()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
-                        離開競賽擂台
-                    </button>
-                    <button id="arena-rematch-btn" onclick="openRematchModal()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition hidden">
-                        <i class="fa-solid fa-rotate-right"></i> 原擂台再比一場 (免換房號)
-                    </button>
-                </div>
-            </div>
-        </div>
+            if (topic === 'multiply') {
+                container.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
+                            <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別一：九九乘法</div>
+                            <div class="grid grid-cols-1 gap-2">
+                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
+                                    <input type="radio" name="mode" value="mul-9x9-standard" checked class="${currentTheme.radio} h-4 w-4">
+                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共81題)</span>
+                                </label>
+                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
+                                    <input type="radio" name="mode" value="mul-9x9-same" class="${currentTheme.radio} h-4 w-4">
+                                    <span class="ml-2 text-sm font-bold text-gray-800">精簡模式 (2×1與1×2相同，共45題)</span>
+                                </label>
+                            </div>
                         </div>
 
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
@@ -2009,7 +2012,6 @@
             });
         }
 
-        // 修正：連動切換自訂目標題數輸入框
         function handleArenaTargetChange(val) {
             const customInput = document.getElementById('arena-custom-target');
             if (val === 'custom') {
@@ -2074,7 +2076,6 @@
             hideAllCompViews();
             document.getElementById('comp-lobby-view').classList.remove('hidden');
 
-            // 廣播給本機或同一頻道分頁
             if (broadcastChannel) {
                 broadcastChannel.postMessage({ type: 'ARENA_STATE_SYNC', state: arenaState });
             }
@@ -2239,7 +2240,6 @@
 
         function onArenaDataUpdated(data) {
             const previousStatus = arenaState?.status;
-            const previousRound = arenaState?.round || 1;
             arenaState = data;
 
             // 老師端更新大廳與監控板
@@ -2277,7 +2277,6 @@
                 document.getElementById('student-play-name').innerText = myPlayerName;
                 document.getElementById('student-target-score').innerText = arenaState.targetScore;
                 
-                // 動態切換語音辨識 UI 與引擎
                 setupCompSpeechUI(arenaState.enableSpeech !== false);
 
                 // 新回合開始：無條件深度重置分數、進度條與題目
@@ -2615,7 +2614,6 @@
             onArenaDataUpdated(arenaState);
         }
 
-        // 修正：頒獎台在少於 3 位參賽者時提供安全防呆保護
         function renderPodiumAndResults(state) {
             hideAllCompViews();
             document.getElementById('comp-result-view').classList.remove('hidden');
@@ -2625,7 +2623,7 @@
 
             document.getElementById('podium-winner-name').innerText = winner.name;
 
-            // 頒獎台安全賦值
+            // 頒獎台安全防呆賦值
             const p1 = pArray[0] || { name: '從缺', score: 0 };
             const p2 = pArray[1] || { name: '從缺', score: 0 };
             const p3 = pArray[2] || { name: '從缺', score: 0 };
@@ -2740,7 +2738,6 @@
             }
         }
 
-        // 學生登入管理
         function toggleStudentLogin() {
             if (!currentStudent.isGuest) {
                 currentStudent = { name: '訪客選手', email: null, isGuest: true };
