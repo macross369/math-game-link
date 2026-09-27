@@ -10,6 +10,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 html2pdf 庫供匯出錯題與題庫 PDF 使用 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- 引入 PeerJS 支援跨裝置(手機/平板/電腦)極速 WebRTC 點對點連線 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
 
     <style>
         /* 避免在列印或 PDF 輸出時表格列或題目卡被強行拆開 */
@@ -61,32 +63,49 @@
     </style>
 
     <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
         let firebaseApp = null, auth = null, db = null;
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        let authReadyPromise = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'math-challenge-app';
 
+        // 優先讀取環境變數，若無則讀取 localStorage 中的自訂配置 (方便 GitHub Pages 部署)
+        let savedCustomConfig = null;
         try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                const firebaseConfig = JSON.parse(__firebase_config);
-                firebaseApp = initializeApp(firebaseConfig);
+            const raw = localStorage.getItem('custom_math_firebase_config');
+            if (raw) savedCustomConfig = JSON.parse(raw);
+        } catch(e) {}
+
+        const targetFirebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config) ?
+            JSON.parse(__firebase_config) : savedCustomConfig;
+
+        if (targetFirebaseConfig) {
+            try {
+                firebaseApp = getApps().length === 0 ? initializeApp(targetFirebaseConfig) : getApps()[0];
                 auth = getAuth(firebaseApp);
                 db = getFirestore(firebaseApp);
 
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                authReadyPromise = new Promise(async (resolve) => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (authErr) {
+                        console.warn("Firebase 匿名認證處理:", authErr);
+                    }
+                    resolve(auth.currentUser);
+                });
 
                 onAuthStateChanged(auth, (user) => {
                     if (window.onFirebaseUserChange) window.onFirebaseUserChange(user);
                 });
+            } catch (initErr) {
+                console.warn("Firebase 初始化降級:", initErr);
             }
-        } catch (e) {
-            console.warn("Firebase 自動連線降級為本地安全模式:", e);
         }
 
         window._fb = {
@@ -94,6 +113,7 @@
             auth: auth,
             db: db,
             appId: appId,
+            authReadyPromise: authReadyPromise,
             GoogleAuthProvider,
             signInWithPopup,
             signOut,
@@ -103,11 +123,25 @@
             getDoc,
             getDocs,
             updateDoc,
-            onSnapshot
+            onSnapshot,
+            reconnect: function(customCfg) {
+                try {
+                    localStorage.setItem('custom_math_firebase_config', JSON.stringify(customCfg));
+                    location.reload();
+                } catch(e) {
+                    console.error("儲存 Firebase Config 失敗:", e);
+                }
+            }
         };
     </script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex flex-col items-center justify-center p-3 md:p-6 text-gray-800">
+
+    <!-- 全域自訂美化提示訊息條 (徹底取代會被 iframe 封鎖的 alert) -->
+    <div id="app-toast" class="fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-5 py-2.5 rounded-2xl text-xs md:text-sm font-bold shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-2">
+        <i id="app-toast-icon" class="fa-solid fa-circle-exclamation text-amber-400"></i>
+        <span id="app-toast-text">提示訊息</span>
+    </div>
 
     <!-- 主容器 -->
     <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-5 md:p-8 transition-all duration-300 my-auto">
@@ -461,6 +495,11 @@
                     </div>
                     <div id="lobby-player-list" class="flex flex-wrap gap-2 min-h-[50px] p-2 bg-gray-50 rounded-xl">
                         <div class="text-xs text-gray-400 m-auto">等待學生加入中...</div>
+                    </div>
+                    <div class="text-center pt-1">
+                        <button type="button" onclick="openTestStudentTab()" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline">
+                            <i class="fa-solid fa-up-right-from-square mr-1"></i> 在本機開啟測試學生分頁（驗證連線）
+                        </button>
                     </div>
                 </div>
 
@@ -836,6 +875,9 @@
                 <button id="admin-subtab-scores" onclick="switchAdminTab('scores')" class="pb-2 text-gray-500 hover:text-indigo-600 px-3">
                     <i class="fa-solid fa-chart-line mr-1"></i> 測驗成績歷程檢視
                 </button>
+                <button id="admin-subtab-firebase" onclick="switchAdminTab('firebase')" class="pb-2 text-gray-500 hover:text-indigo-600 px-3">
+                    <i class="fa-solid fa-fire mr-1 text-amber-500"></i> Firebase 連線設定
+                </button>
             </div>
 
             <!-- 子分頁一：名單設定 -->
@@ -899,22 +941,22 @@
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
                                 <tr class="bg-gray-100 text-gray-700 border-b">
-                                    <th class="p-2 font-bold">測驗時間</th>
-                                    <th class="p-2 font-bold">學生姓名</th>
-                                    <th class="p-2 font-bold">Google帳號</th>
-                                    <th class="p-2 font-bold">主題 / 題型單元</th>
-                                    <th class="p-2 font-bold text-center">秒數</th>
-                                    <th class="p-2 font-bold text-center">答對/總題</th>
-                                    <th class="p-2 font-bold text-center">得分率</th>
-                                </tr>
-                            </thead>
-                            <tbody id="scores-table-body">
-                                <tr>
-                                    <td colspan="7" class="p-4 text-center text-gray-400">尚無測驗紀錄</td>
-                                </tr>
-                            </tbody>
-                        </table>
+            <!-- 子分頁三：GitHub / Firebase 專案配置 -->
+            <div id="admin-view-firebase" class="hidden space-y-4">
+                <div class="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-3 text-xs md:text-sm">
+                    <h3 class="font-extrabold text-amber-900 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-amber-600"></i> 部署至 GitHub Pages 或自建 Firebase 說明
+                    </h3>
+                    <p class="text-gray-700 leading-relaxed">
+                        若您將本專案部署在 <b>GitHub Pages</b> 或獨立的 <b>Firebase Hosting</b> 專案中，可在此貼上您的 Firebase 專案設定 JSON。設定完成後，全班同學無論使用手機或平板，皆能直接連線同一資料庫，即時進入擂台並永久保存作答紀錄！
+                    </p>
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">Firebase Configuration JSON：</label>
+                        <textarea id="firebase-config-textarea" rows="5" placeholder='{"apiKey": "AIzaSy...", "authDomain": "...", "projectId": "...", ...}' class="w-full p-2.5 bg-white border border-gray-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-amber-500"></textarea>
                     </div>
+                    <button onclick="saveCustomFirebaseConfig()" class="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl shadow transition text-xs">
+                        <i class="fa-solid fa-floppy-disk mr-1"></i> 儲存設定並重新載入系統
+                    </button>
                 </div>
             </div>
         </div>
@@ -978,6 +1020,12 @@
         let compCurrentQ = null;
         let arenaUnsubscribe = null;
         const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('arena_sync_channel') : null;
+
+        // WebRTC P2P (PeerJS) 跨裝置即時通訊實體
+        let hostPeer = null;
+        let hostConnections = {}; // 連線的學生字典 { connId: conn }
+        let clientPeer = null;
+        let clientConn = null;
 
         window.onload = function() {
             updateModeOptions();
@@ -1148,7 +1196,10 @@
             // 準備題目集
             compQuestionPool = buildQuestionsByMode(topic, mode);
 
-            // 儲存至 Firebase (若有連線)
+            // 啟動 WebRTC 房間主機節點
+            initHostPeer(code);
+
+            // 儲存至 Firebase (若有連線) 並進行廣播
             saveArenaState(arenaState);
             listenToArena(currentArenaId);
 
@@ -1167,12 +1218,63 @@
             document.getElementById('comp-lobby-view').classList.remove('hidden');
         }
 
+        // 老師主機 WebRTC 建立
+        function initHostPeer(code) {
+            try {
+                if (window.Peer) {
+                    if (hostPeer) { hostPeer.destroy(); hostPeer = null; }
+                    hostConnections = {};
+                    hostPeer = new Peer(`matharena-${code}`);
+                    
+                    hostPeer.on('connection', (conn) => {
+                        hostConnections[conn.peer] = conn;
+                        conn.on('data', (msg) => handleHostPeerMessage(conn, msg));
+                        conn.on('close', () => { delete hostConnections[conn.peer]; });
+                    });
+                }
+            } catch (err) {
+                console.warn("PeerJS 主機啟動異常:", err);
+            }
+        }
+
+        function handleHostPeerMessage(conn, msg) {
+            if (!msg || !arenaState) return;
+            if (msg.type === 'JOIN_ARENA') {
+                if (!arenaState.players) arenaState.players = {};
+                arenaState.players[msg.player.id] = msg.player;
+                // 回覆學生最新房間狀態
+                conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                // 廣播給其他所有已連線學生
+                broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                onArenaDataUpdated(arenaState);
+            } else if (msg.type === 'SCORE_UPDATE') {
+                if (arenaState.players && arenaState.players[msg.playerId]) {
+                    arenaState.players[msg.playerId].score = msg.score;
+                    if (msg.score >= arenaState.targetScore && arenaState.status !== 'ended') {
+                        arenaState.status = 'ended';
+                        arenaState.winner = arenaState.players[msg.playerId];
+                    }
+                    broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                    onArenaDataUpdated(arenaState);
+                }
+            }
+        }
+
+        function broadcastToAllStudents(packet) {
+            Object.values(hostConnections).forEach(conn => {
+                if (conn && conn.open) conn.send(packet);
+            });
+            if (broadcastChannel) broadcastChannel.postMessage(packet);
+            saveArenaState(arenaState);
+        }
+
+        // 學生加入擂台單一且穩健的邏輯 (移除重複宣告與錯誤彈窗)
         async function joinArenaSubmit() {
             const codeInput = document.getElementById('join-code-input').value.trim();
             const nameInput = document.getElementById('join-name-input').value.trim() || '無名選手';
 
             if (!codeInput || codeInput.length !== 6) {
-                alertCustomMessage("請輸入正確的 6 位數擂台代碼！");
+                showToast("請輸入正確的 6 位數擂台代碼！");
                 return;
             }
 
@@ -1181,37 +1283,82 @@
             myCurrentScore = 0;
             isTeacherHost = false;
 
-            // 先載入該擂台資料
-            let arenaData = await fetchArenaData(currentArenaId);
-            if (!arenaData) {
-                // 嘗試從本地廣播快取確認
-                if (arenaState && arenaState.id === currentArenaId) {
-                    arenaData = arenaState;
-                } else {
-                    alertCustomMessage("找不到該擂台或擂台已結束，請確認代碼！");
-                    return;
-                }
-            }
+            showToast("正在連線進入擂台...", false);
 
-            // 註冊玩家進房間
-            if (!arenaData.players) arenaData.players = {};
-            arenaData.players[myPlayerId] = {
+            const playerData = {
                 id: myPlayerId,
                 name: myPlayerName,
                 score: 0,
                 joinedAt: new Date().toISOString()
             };
 
-            await updateArenaPlayer(currentArenaId, myPlayerId, arenaData.players[myPlayerId]);
-            listenToArena(currentArenaId);
+            // 確保 Firebase Auth 已完成授權
+            if (window._fb?.authReadyPromise) {
+                await window._fb.authReadyPromise;
+            }
 
-            // 轉到學生等候畫面
-            document.getElementById('student-waiting-name').innerText = myPlayerName;
-            document.getElementById('student-waiting-code').innerText = currentArenaId;
-            document.getElementById('student-waiting-target').innerText = arenaData.targetScore + ' 題獲勝';
+            // 1. 透過 WebRTC (PeerJS) 跨裝置直連進入擂台
+            if (window.Peer) {
+                try {
+                    if (clientPeer) { clientPeer.destroy(); clientPeer = null; }
+                    clientPeer = new Peer();
+                    clientPeer.on('open', () => {
+                        clientConn = clientPeer.connect(`matharena-${currentArenaId}`, { reliable: true });
+                        clientConn.on('open', () => {
+                            clientConn.send({ type: 'JOIN_ARENA', player: playerData });
+                        });
+                        clientConn.on('data', (data) => {
+                            if (data.type === 'ARENA_STATE_SYNC' && data.state) {
+                                onArenaDataUpdated(data.state);
+                            }
+                        });
+                    });
+                } catch(e) {
+                    console.warn("Peer Client 連線異常:", e);
+                }
+            }
 
-            hideAllCompViews();
-            document.getElementById('comp-student-waiting-view').classList.remove('hidden');
+            // 2. 廣播通道握手 (本機多開即刻連線)
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'REQUEST_ROOM_SYNC', arenaId: currentArenaId, player: playerData });
+            }
+
+            // 3. 連線輪詢嘗試 (給予 1.5 秒緩衝期讓 Firebase / PeerJS 握手完成)
+            let attempts = 0;
+            const maxAttempts = 6;
+            const checkInterval = setInterval(async () => {
+                attempts++;
+                let arenaData = await fetchArenaData(currentArenaId);
+                if (arenaData || (arenaState && arenaState.id === currentArenaId)) {
+                    clearInterval(checkInterval);
+                    if (!arenaState && arenaData) arenaState = arenaData;
+
+                    if (!arenaState.players) arenaState.players = {};
+                    arenaState.players[myPlayerId] = playerData;
+                    await updateArenaPlayer(currentArenaId, myPlayerId, playerData);
+                    listenToArena(currentArenaId);
+
+                    document.getElementById('student-waiting-name').innerText = myPlayerName;
+                    document.getElementById('student-waiting-code').innerText = currentArenaId;
+                    document.getElementById('student-waiting-target').innerText = arenaState.targetScore + ' 題獲勝';
+
+                    hideAllCompViews();
+                    document.getElementById('comp-student-waiting-view').classList.remove('hidden');
+                    showToast("已成功加入擂台！", true);
+                    return;
+                }
+
+                if (attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    showToast("找不到該擂台或擂台已結束，請確認代碼是否正確！");
+                }
+            }, 300);
+        }
+
+        function openTestStudentTab() {
+            if (!currentArenaId) return;
+            const url = window.location.href.split('?')[0] + '?arena=' + currentArenaId;
+            window.open(url, '_blank');
         }
 
         // ================== 即時同步與監聽引擎 (Firebase Firestore + BroadcastChannel) ==================
@@ -1280,15 +1427,20 @@
 
         function handleLocalBroadcast(msg) {
             if (!msg) return;
-            if (msg.type === 'ARENA_SYNC' && msg.data) {
+            if (msg.type === 'REQUEST_ROOM_SYNC' && isTeacherHost && arenaState && arenaState.id === msg.arenaId) {
+                if (msg.player) {
+                    if (!arenaState.players) arenaState.players = {};
+                    arenaState.players[msg.player.id] = msg.player;
+                }
+                broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                onArenaDataUpdated(arenaState);
+            } else if (msg.type === 'ARENA_STATE_SYNC' && msg.state) {
+                if (currentArenaId === msg.state.id) {
+                    onArenaDataUpdated(msg.state);
+                }
+            } else if (msg.type === 'ARENA_SYNC' && msg.data) {
                 if (currentArenaId === msg.data.id) {
                     onArenaDataUpdated(msg.data);
-                }
-            } else if (msg.type === 'PLAYER_UPDATE' && msg.arenaId === currentArenaId) {
-                if (arenaState) {
-                    if (!arenaState.players) arenaState.players = {};
-                    arenaState.players[msg.pId] = msg.playerData;
-                    onArenaDataUpdated(arenaState);
                 }
             }
         }
@@ -1362,22 +1514,19 @@
             if (!arenaState) return;
             const pCount = Object.keys(arenaState.players || {}).length;
             if (pCount === 0) {
-                alertCustomMessage("目前尚無學生加入擂台，請等待學生加入後再開始！");
+                showToast("目前尚無學生加入擂台，請等待學生加入後再開始！");
                 return;
             }
             arenaState.status = 'playing';
-            saveArenaState(arenaState);
+            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
             onArenaDataUpdated(arenaState);
         }
 
         function dismissArena() {
+            if (hostPeer) { hostPeer.destroy(); hostPeer = null; }
+            if (clientPeer) { clientPeer.destroy(); clientPeer = null; }
             if (arenaUnsubscribe) arenaUnsubscribe();
-            arenaState = null;
-            currentArenaId = null;
-            showCompHomeView();
-        }
-
-        // ================== 學生作答邏輯 (答對+1，答錯-1，最低0分) ==================
+        // ================== 學生作答邏輯 (修正 target 未定義 bug) ==================
         function nextCompQuestion() {
             if (!compQuestionPool || compQuestionPool.length === 0) {
                 compQuestionPool = buildQuestionsByMode(arenaState?.topic || 'multiply', arenaState?.mode || 'mul-9x9-standard');
@@ -1404,6 +1553,7 @@
 
             const isCorrect = (inputVal === Number(compCurrentQ.ans));
             const feedbackElem = document.getElementById('comp-feedback-text');
+            const targetScore = arenaState?.targetScore || 5;
 
             if (isCorrect) {
                 myCurrentScore += 1;
@@ -1413,24 +1563,28 @@
                 feedbackElem.innerHTML = `<span class="text-red-300 font-black">答錯！-1 分 ❌ (最低0分)</span>`;
             }
 
-            // 更新畫面比分與進度條
+            // 更新個人畫面比分與進度條
             document.getElementById('student-my-score').innerText = myCurrentScore;
-            const target = arenaState?.targetScore || 5;
-            const progress = Math.min(100, Math.round((myCurrentScore / target) * 100));
-            document.getElementById('student-progress-bar').style.width = progress + '%';
+            const progress = Math.min(100, Math.round((myCurrentScore / targetScore) * 100));
+            document.getElementById('student-progress-bar').style.width = `${progress}%`;
 
-            // 同步分數至雲端/廣播
+            // 同步分數至雲端/WebRTC直連/廣播
+            if (clientConn && clientConn.open) {
+                clientConn.send({ type: 'SCORE_UPDATE', playerId: myPlayerId, score: myCurrentScore });
+            }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'PLAYER_SCORE', arenaId: currentArenaId, playerId: myPlayerId, score: myCurrentScore });
+            }
             if (arenaState && arenaState.players && arenaState.players[myPlayerId]) {
                 arenaState.players[myPlayerId].score = myCurrentScore;
                 updateArenaPlayer(currentArenaId, myPlayerId, arenaState.players[myPlayerId]);
             }
 
             // 檢查是否達到獲勝題數
-            if (myCurrentScore >= target) {
-                // 率先達標！結束比賽
+            if (myCurrentScore >= targetScore) {
                 arenaState.status = 'ended';
                 arenaState.winner = { id: myPlayerId, name: myPlayerName, score: myCurrentScore };
-                saveArenaState(arenaState);
+                if (isTeacherHost) broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
                 onArenaDataUpdated(arenaState);
                 return;
             }
@@ -1510,7 +1664,7 @@
             document.getElementById('comp-podium-view').classList.remove('hidden');
 
             const players = Object.values(arenaData.players || {}).sort((a, b) => b.score - a.score);
-            const first = players[0] || { name: '無', score: 0 };
+            const first = arenaData.winner || players[0] || { name: '無', score: 0 };
             const second = players[1] || { name: '從缺', score: 0 };
             const third = players[2] || { name: '從缺', score: 0 };
 
@@ -1551,8 +1705,28 @@
             });
         }
 
-        function alertCustomMessage(msg) {
-            alert(msg); // 瀏覽器標準對話框或自訂對話條
+        // 自訂無阻塞通知條 (替代瀏覽器 alert)
+        let toastTimeout = null;
+        function showToast(msg, isSuccess = false) {
+            const toast = document.getElementById('app-toast');
+            const text = document.getElementById('app-toast-text');
+            const icon = document.getElementById('app-toast-icon');
+
+            text.innerText = msg;
+            if (isSuccess) {
+                icon.className = "fa-solid fa-circle-check text-emerald-400";
+            } else {
+                icon.className = "fa-solid fa-circle-exclamation text-amber-400";
+            }
+
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2500);
         }
 
         // ================== 模式一：遊戲邏輯與主題樣式 ==================
@@ -2427,19 +2601,44 @@
         function switchAdminTab(subtab) {
             const rosterBtn = document.getElementById('admin-subtab-roster');
             const scoresBtn = document.getElementById('admin-subtab-scores');
+            const firebaseBtn = document.getElementById('admin-subtab-firebase');
             const rosterView = document.getElementById('admin-view-roster');
             const scoresView = document.getElementById('admin-view-scores');
+            const firebaseView = document.getElementById('admin-view-firebase');
+
+            rosterBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
+            scoresBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
+            firebaseBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
+            rosterView.classList.add('hidden');
+            scoresView.classList.add('hidden');
+            firebaseView.classList.add('hidden');
 
             if (subtab === 'roster') {
                 rosterBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
-                scoresBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
                 rosterView.classList.remove('hidden');
-                scoresView.classList.add('hidden');
-            } else {
+            } else if (subtab === 'scores') {
                 scoresBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
-                rosterBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
                 scoresView.classList.remove('hidden');
-                rosterView.classList.add('hidden');
+            } else if (subtab === 'firebase') {
+                firebaseBtn.className = "pb-2 text-amber-600 border-b-2 border-amber-600 px-3 font-black";
+                firebaseView.classList.remove('hidden');
+                // 回填目前設定
+                const raw = localStorage.getItem('custom_math_firebase_config');
+                if (raw) document.getElementById('firebase-config-textarea').value = raw;
+            }
+        }
+
+        function saveCustomFirebaseConfig() {
+            const text = document.getElementById('firebase-config-textarea').value.trim();
+            if (!text) {
+                showToast("請輸入有效的 Firebase Config JSON！");
+                return;
+            }
+            try {
+                const parsed = JSON.parse(text);
+                window._fb.reconnect(parsed);
+            } catch(e) {
+                showToast("JSON 格式不合規定，請檢查語法！");
             }
         }
 
