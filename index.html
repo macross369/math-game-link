@@ -986,6 +986,8 @@
         let clientConn = null;
         let connectedClients = {};
         let arenaState = null;
+        let myCompRound = 1; // 記錄學生本地當前回合編號
+        let compNextQTimer = null; // 計時器控制，防舊題連鎖觸發
 
         // 本地名冊與成績快取 (支援獨立離線運作)
         let rosterList = [
@@ -1100,31 +1102,32 @@
             };
 
             topics.forEach(t => {
-                const labelElem = document.getElementById(`topic-label-${t}`);
-                if (labelElem) {
-                    labelElem.className = (t === topic) ? 
-                        `flex items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${colorMap[t].active}` :
-                        `flex items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${colorMap[t].inactive}`;
-                }
-            });
+                <!-- 全體選手積分排行榜 -->
+                <div class="space-y-2">
+                    <h4 class="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                        <i class="fa-solid fa-list-ol text-indigo-600"></i> 全場排行榜
+                    </h4>
+                    <div id="arena-leaderboard-list" class="max-h-48 overflow-y-auto space-y-1.5 p-2 bg-gray-50 rounded-2xl border text-xs">
+                        <!-- 動態填入排行榜 -->
+                    </div>
+                </div>
 
-            const currentTheme = colorMap[topic];
+                <!-- 學生端專用：原擂台等待下一輪提示 -->
+                <div id="student-rematch-waiting-notice" class="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-center text-xs text-indigo-700 font-bold flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-hourglass-half animate-spin text-amber-500"></i> 原擂台已保留！請留在本頁面，老師發起新一輪後將自動換題開戰
+                </div>
 
-            if (topic === 'multiply') {
-                container.innerHTML = `
-                    <div class="space-y-3">
-                        <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
-                            <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別一：九九乘法</div>
-                            <div class="grid grid-cols-1 gap-2">
-                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
-                                    <input type="radio" name="mode" value="mul-9x9-standard" checked class="${currentTheme.radio} h-4 w-4">
-                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共81題)</span>
-                                </label>
-                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
-                                    <input type="radio" name="mode" value="mul-9x9-same" class="${currentTheme.radio} h-4 w-4">
-                                    <span class="ml-2 text-sm font-bold text-gray-800">精簡模式 (2×1與1×2相同，共45題)</span>
-                                </label>
-                            </div>
+                <!-- 底部按鈕區 (老師可原房續賽，學生可返回) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <button onclick="showCompHomeView()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
+                        離開競賽擂台
+                    </button>
+                    <button id="arena-rematch-btn" onclick="openRematchModal()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition hidden">
+                        <i class="fa-solid fa-rotate-right"></i> 原擂台再比一場 (免換房號)
+                    </button>
+                </div>
+            </div>
+        </div>
                         </div>
 
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
@@ -2113,6 +2116,10 @@
                 broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
                 onArenaDataUpdated(arenaState);
             } else if (data.type === 'PLAYER_SCORE_UPDATE') {
+                // 嚴格過濾：拋棄舊回合的延遲比分封包
+                if (data.round && data.round !== arenaState.round) return;
+                if (arenaState.status !== 'playing') return;
+
                 const p = data.player;
                 if (arenaState.players && arenaState.players[p.id]) {
                     arenaState.players[p.id].score = p.score;
@@ -2121,6 +2128,10 @@
                 broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
                 onArenaDataUpdated(arenaState);
             } else if (data.type === 'MATCH_WON') {
+                // 嚴格過濾：拋棄舊回合的獲勝廣播，避免第二局被上一局勝出者秒殺
+                if (data.round && data.round !== arenaState.round) return;
+                if (arenaState.status !== 'playing') return;
+
                 arenaState.status = 'ended';
                 arenaState.winner = data.winner;
                 broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
@@ -2269,17 +2280,26 @@
                 // 動態切換語音辨識 UI 與引擎
                 setupCompSpeechUI(arenaState.enableSpeech !== false);
 
-                // 新回合開始：重置分數與題目
-                if (previousStatus === 'ended' || (arenaState.round && arenaState.round > previousRound) || !compCurrentQ) {
-                    myCurrentScore = (arenaState.players && arenaState.players[myPlayerId]) ? (arenaState.players[myPlayerId].score || 0) : 0;
-                    document.getElementById('student-my-score').innerText = myCurrentScore;
+                // 新回合開始：無條件深度重置分數、進度條與題目
+                const isNewRound = (arenaState.round && arenaState.round > myCompRound);
+                const isRestartFromEnded = (previousStatus === 'ended');
+                
+                if (isNewRound || isRestartFromEnded || !compCurrentQ) {
+                    if (compNextQTimer) clearTimeout(compNextQTimer);
+                    myCompRound = arenaState.round || 1;
+                    myCurrentScore = 0;
+                    document.getElementById('student-my-score').innerText = '0';
                     document.getElementById('student-progress-bar').style.width = '0%';
+                    document.getElementById('comp-manual-input').value = '';
                     compCurrentQ = null;
+                    isCompAnswering = false;
                     document.getElementById('comp-feedback-text').innerText = '答對 +1 分，答錯扣 1 分（最低 0 分）';
                     compQuestionPool = buildQuestionsByMode(arenaState.topic, arenaState.mode);
                     nextCompQuestion();
                 }
             } else if (arenaState.status === 'ended') {
+                if (compNextQTimer) clearTimeout(compNextQTimer);
+                isCompAnswering = false;
                 stopCompSpeechRecognition();
                 renderPodiumAndResults(arenaState);
             }
@@ -2472,23 +2492,25 @@
             const pct = Math.min(100, Math.round((myCurrentScore / target) * 100));
             document.getElementById('student-progress-bar').style.width = `${pct}%`;
 
+            const currentRoundNumber = arenaState.round || 1;
             const updateData = {
                 id: myPlayerId,
                 name: myPlayerName,
                 score: myCurrentScore,
+                round: currentRoundNumber,
                 updatedAt: new Date().toISOString()
             };
 
-            // 推播比分
+            // 推播比分 (帶入回合編號)
             if (clientConn && clientConn.open) {
-                clientConn.send({ type: 'PLAYER_SCORE_UPDATE', player: updateData });
+                clientConn.send({ type: 'PLAYER_SCORE_UPDATE', round: currentRoundNumber, player: updateData });
             }
             if (broadcastChannel) {
-                broadcastChannel.postMessage({ type: 'PLAYER_SCORE_UPDATE', arenaId: currentArenaId, player: updateData });
+                broadcastChannel.postMessage({ type: 'PLAYER_SCORE_UPDATE', arenaId: currentArenaId, round: currentRoundNumber, player: updateData });
             }
 
             if (myCurrentScore >= target) {
-                const winPayload = { arenaId: currentArenaId, winner: updateData };
+                const winPayload = { arenaId: currentArenaId, round: currentRoundNumber, winner: updateData };
                 if (clientConn && clientConn.open) {
                     clientConn.send({ type: 'MATCH_WON', ...winPayload });
                 }
@@ -2499,7 +2521,8 @@
                 return;
             }
 
-            setTimeout(nextCompQuestion, 400);
+            if (compNextQTimer) clearTimeout(compNextQTimer);
+            compNextQTimer = setTimeout(nextCompQuestion, 400);
         }
 
         function renderLobbyPlayers(players) {
@@ -2625,12 +2648,15 @@
                 </div>
             `).join('');
 
-            // 老師端提供續賽按鈕
+            // 老師端提供續賽按鈕；學生端顯示等待老師廣播提示
             const rematchBtn = document.getElementById('arena-rematch-btn');
+            const studentNotice = document.getElementById('student-rematch-waiting-notice');
             if (isTeacherHost) {
                 rematchBtn.classList.remove('hidden');
+                if (studentNotice) studentNotice.classList.add('hidden');
             } else {
                 rematchBtn.classList.add('hidden');
+                if (studentNotice) studentNotice.classList.remove('hidden');
             }
         }
 
