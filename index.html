@@ -40,32 +40,32 @@
     </style>
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, getDocs, addDoc, query } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-        // 您的專屬 Firebase 專案配置 (math-king-challenge)
-        const firebaseConfig = {
-            apiKey: "AIzaSyBBoWQj7nGa0Dr29ZyYFSZkLSymwdQ5qVE",
-            authDomain: "math-king-challenge.firebaseapp.com",
-            projectId: "math-king-challenge",
-            storageBucket: "math-king-challenge.firebasestorage.app",
-            messagingSenderId: "761153334681",
-            appId: "1:761153334681:web:d185e9b60d243d39c4f708"
-        };
-
+        // 讀取全域環境變數 (若無則安全容錯降級為獨立模式)
         let firebaseApp = null, auth = null, db = null;
-        const appId = 'math-king-challenge';
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         try {
-            firebaseApp = initializeApp(firebaseConfig);
-            auth = getAuth(firebaseApp);
-            db = getFirestore(firebaseApp);
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                firebaseApp = initializeApp(firebaseConfig);
+                auth = getAuth(firebaseApp);
+                db = getFirestore(firebaseApp);
 
-            onAuthStateChanged(auth, (user) => {
-                if (window.onFirebaseUserChange) window.onFirebaseUserChange(user);
-            });
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (window.onFirebaseUserChange) window.onFirebaseUserChange(user);
+                });
+            }
         } catch (e) {
-            console.warn("Firebase 初始化異常，進入本地防呆模式:", e);
+            console.warn("Firebase 自動連線降級為本地安全模式:", e);
         }
 
         window._fb = {
@@ -294,7 +294,6 @@
                 </div>
             </div>
         </div>
-
         <!-- ================= 模式三：教師後台管理專區 ================= -->
         <div id="teacher-section" class="hidden space-y-4 no-print">
             <div class="flex justify-between items-center border-b pb-3">
@@ -424,7 +423,6 @@
                 </div>
             </div>
         </div>
-
         <!-- ================= 模式二：題庫下載／列印專區 ================= -->
         <div id="worksheet-section" class="hidden space-y-4">
             <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-4 no-print">
@@ -544,7 +542,6 @@
         </div>
 
     </div>
-
     <script>
         let questions = [];
         let currentIndex = 0;
@@ -665,7 +662,6 @@
                 actionBtn.className = "ml-1 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded-lg transition shadow-sm";
             }
         }
-
         // ================== 教師後台驗證與視圖 ==================
         function openTeacherLoginModal() {
             document.getElementById('teacher-pwd-input').value = '';
@@ -884,8 +880,7 @@
                 }
             }
         }
-
-        // ================== 集中管理的三方視圖切換器 ==================
+        // ================== 集中管理的三方視圖切換器 (徹底解決畫面重疊問題) ==================
         function setActiveView(view) {
             const interactiveSec = document.getElementById('interactive-section');
             const worksheetSec = document.getElementById('worksheet-section');
@@ -1161,8 +1156,7 @@
                 `;
             }
         }
-
-        // 題目生成通用器
+        // 題目生成通用器 (供互動模式與題庫模式共用)
         function buildQuestionsByMode(topic, mode) {
             let list = [];
             if (topic === 'multiply') {
@@ -1338,7 +1332,6 @@
                 labelTest.className = "flex flex-col items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 bg-white/70 border-gray-200 text-gray-700 hover:bg-white";
             }
         }
-
         function generateWorksheetPreview() {
             const wsType = document.querySelector('input[name="wsType"]:checked').value;
             const mode = document.getElementById('ws-mode-select').value;
@@ -1461,7 +1454,6 @@
                 });
             }, 200);
         }
-
         // ================== 模式一：遊戲執行核心邏輯 ==================
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1627,7 +1619,6 @@
             currentIndex++;
             setTimeout(nextQuestion, 800);
         }
-
         function togglePause() {
             isPaused = !isPaused;
             updatePauseButtonUI();
