@@ -6,7 +6,7 @@
     <title>數學計算能力挑戰王</title>
     <!-- 引入 Tailwind CSS 進行現代化響應式排版 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 FontAwesome 圖示 -->
+    <!-- 引入 FontAwesome 圖示庫 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- 引入 html2pdf 庫供匯出錯題與題庫 PDF 使用 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -37,13 +37,34 @@
                 break-inside: avoid;
             }
         }
+
+        /* 頒獎台階梯視覺與動態特效 */
+        .podium-1 {
+            height: 140px;
+            background: linear-gradient(180deg, #FBBF24 0%, #D97706 100%);
+        }
+        .podium-2 {
+            height: 105px;
+            background: linear-gradient(180deg, #E2E8F0 0%, #94A3B8 100%);
+        }
+        .podium-3 {
+            height: 75px;
+            background: linear-gradient(180deg, #FDBA74 0%, #C2410C 100%);
+        }
+        @keyframes crownBounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-8px) scale(1.08); }
+        }
+        .champion-trophy {
+            animation: crownBounce 2s infinite ease-in-out;
+        }
     </style>
+
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDocs, addDoc, query } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-        // 讀取全域環境變數 (若無則安全容錯降級為獨立模式)
         let firebaseApp = null, auth = null, db = null;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
@@ -79,29 +100,35 @@
             collection,
             doc,
             setDoc,
+            getDoc,
             getDocs,
-            addDoc,
-            query
+            updateDoc,
+            onSnapshot
         };
     </script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex flex-col items-center justify-center p-3 md:p-6 text-gray-800">
 
+    <!-- 主容器 -->
     <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-5 md:p-8 transition-all duration-300 my-auto">
         
-        <!-- 頂端導航頁籤：線上測驗 VS 題庫下載 與 後台登入 -->
+        <!-- 頂端導航頁籤：三大核心模式切換與學生/後台按鈕 -->
         <div class="flex justify-between items-center mb-4 no-print flex-wrap gap-2">
-            <div class="bg-gray-100 p-1.5 rounded-2xl flex items-center gap-1 border border-gray-200 shadow-inner">
-                <button id="tab-btn-interactive" onclick="switchMainTab('interactive')" class="px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md">
-                    <i class="fa-solid fa-gamepad mr-1"></i> 線上挑戰模式
+            <div class="bg-gray-100 p-1.5 rounded-2xl flex items-center gap-1 border border-gray-200 shadow-inner flex-wrap">
+                <button id="tab-btn-interactive" onclick="switchMainTab('interactive')" class="px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md">
+                    <i class="fa-solid fa-gamepad mr-1"></i> 個人挑戰模式
                 </button>
-                <button id="tab-btn-worksheet" onclick="switchMainTab('worksheet')" class="px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600">
-                    <i class="fa-solid fa-file-pdf mr-1"></i> 題庫下載／列印
+                <button id="tab-btn-worksheet" onclick="switchMainTab('worksheet')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600">
+                    <i class="fa-solid fa-file-pdf mr-1"></i> 題庫列印
+                </button>
+                <!-- 第三個分頁：即時競賽擂台 -->
+                <button id="tab-btn-competition" onclick="switchMainTab('competition')" class="px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-amber-700 hover:text-amber-800 bg-amber-50/80 border border-amber-200">
+                    <i class="fa-solid fa-trophy mr-1 text-amber-500"></i> 即時競賽擂台
                 </button>
             </div>
 
             <!-- 右側：學生 Google 登入狀態與教師後台入口 -->
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 ml-auto">
                 <div id="student-user-pill" class="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 px-2.5 py-1.5 rounded-2xl text-xs font-bold text-indigo-900">
                     <i class="fa-solid fa-user-circle text-indigo-600 text-sm"></i>
                     <span id="student-user-name">訪客學生</span>
@@ -128,7 +155,6 @@
             <!-- 畫面一：設定區 -->
             <div id="setup-screen" class="space-y-4">
                 <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-4">
-                    
                     <!-- 四大主要主題選擇 (馬卡龍色系按鈕) -->
                     <div>
                         <label class="block font-extrabold text-gray-800 text-sm mb-2">
@@ -163,7 +189,7 @@
                         </div>
                     </div>
 
-                    <!-- 選擇秒數 (含10秒) -->
+                    <!-- 選擇秒數 -->
                     <div>
                         <label class="block font-extrabold text-gray-800 text-sm mb-1.5">
                             <i class="fa-solid fa-stopwatch text-indigo-500 mr-1.5"></i> 每題限制秒數：
@@ -186,7 +212,6 @@
 
             <!-- 畫面二：遊戲作答區 -->
             <div id="game-screen" class="hidden space-y-4">
-                <!-- 頂部資訊列 -->
                 <div class="flex justify-between items-center bg-gray-50 p-3 rounded-2xl border">
                     <div class="text-xs md:text-sm font-semibold text-gray-600">
                         進度：<span id="current-index" class="text-indigo-600 font-bold">1</span> / <span id="total-count">45</span> 題
@@ -205,14 +230,14 @@
                         <i class="fa-solid fa-microphone text-red-300"></i> 請說出答案 (或點擊嘗試開啟麥克風)
                     </div>
                 </div>
+
                 <!-- 輸入與螢幕觸控數字鍵盤區 -->
                 <div class="space-y-3 bg-gray-50 p-3.5 rounded-2xl border">
                     <div class="flex items-center justify-between text-xs text-gray-500">
                         <span>語音辨識：<b id="transcript" class="text-indigo-600 italic">（等待中...）</b></span>
-                        <span class="text-gray-400">可用下方數字鍵盤作答</span>
+                        <span class="text-gray-400">可用螢幕鍵盤作答</span>
                     </div>
                     
-                    <!-- 手動輸入顯示框與送出按鈕 -->
                     <div class="flex justify-center items-center gap-2">
                         <input type="number" id="manual-input" placeholder="答案" class="w-28 p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center text-xl font-bold bg-white" onkeydown="if(event.key==='Enter') submitManualAnswer()">
                         <button onclick="submitManualAnswer()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition flex items-center gap-1.5 shrink-0">
@@ -277,13 +302,9 @@
                         </h3>
                         <span class="text-xs text-gray-500">數學計算能力挑戰王 報告</span>
                     </div>
-                    
-                    <div id="wrong-list-container" class="max-h-60 overflow-y-auto space-y-2">
-                        <!-- 動態填入 -->
-                    </div>
+                    <div id="wrong-list-container" class="max-h-60 overflow-y-auto space-y-2"></div>
                 </div>
 
-                <!-- 操作按鈕列 -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button onclick="downloadPDF()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
                         <i class="fa-solid fa-file-pdf"></i> 下載錯題 PDF 檔
@@ -294,135 +315,389 @@
                 </div>
             </div>
         </div>
-        <!-- ================= 模式三：教師後台管理專區 ================= -->
-        <div id="teacher-section" class="hidden space-y-4 no-print">
-            <div class="flex justify-between items-center border-b pb-3">
-                <div class="flex items-center gap-2">
-                    <div class="w-9 h-9 rounded-xl bg-gray-900 text-amber-400 flex items-center justify-center text-lg shadow">
-                        <i class="fa-solid fa-chalkboard-user"></i>
-                    </div>
-                    <div>
-                        <h2 class="text-lg md:text-xl font-extrabold text-gray-800">教師成績管理後台</h2>
-                        <p class="text-xs text-gray-500">預設學生名冊授權與查詢學生測驗歷程數據</p>
-                    </div>
-                </div>
-                <button onclick="closeTeacherDashboard()" class="text-gray-500 hover:text-gray-800 px-3 py-1 text-sm font-bold bg-gray-100 rounded-xl">
-                    <i class="fa-solid fa-xmark mr-1"></i> 返回測驗
-                </button>
-            </div>
 
-            <!-- 後台子分頁 -->
-            <div class="flex gap-2 border-b text-sm font-bold">
-                <button id="admin-subtab-roster" onclick="switchAdminTab('roster')" class="pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3">
-                    <i class="fa-solid fa-user-plus mr-1"></i> 學生名單管理
-                </button>
-                <button id="admin-subtab-scores" onclick="switchAdminTab('scores')" class="pb-2 text-gray-500 hover:text-indigo-600 px-3">
-                    <i class="fa-solid fa-chart-line mr-1"></i> 測驗成績歷程檢視
-                </button>
-            </div>
-
-            <!-- 子分頁一：名單設定 -->
-            <div id="admin-view-roster" class="space-y-4">
-                <div class="bg-gray-50 p-4 rounded-2xl border space-y-3">
-                    <h3 class="font-extrabold text-sm text-gray-800 flex items-center gap-2">
-                        <i class="fa-solid fa-address-book text-indigo-600"></i> 新增授權學生（姓名與 Google 帳號）
-                    </h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input type="text" id="roster-name-input" placeholder="學生真實姓名 (如: 陳小明)" class="p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <input type="email" id="roster-email-input" placeholder="學生 Google 信箱 (如: ming@gmail.com)" class="p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        <!-- ================= 模式三：即時競賽擂台模式 (全新加入) ================= -->
+        <div id="competition-section" class="hidden space-y-4">
+            
+            <!-- 視圖 A：競賽入口主選單 (選擇主持開台 or 學生加入) -->
+            <div id="comp-home-view" class="space-y-4">
+                <div class="bg-amber-50/70 p-5 rounded-3xl border border-amber-200 text-center space-y-2">
+                    <div class="w-16 h-16 mx-auto bg-amber-100 rounded-full flex items-center justify-center text-3xl text-amber-600 shadow-inner">
+                        <i class="fa-solid fa-trophy"></i>
                     </div>
-                    <button onclick="addStudentToRoster()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition text-sm flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-plus"></i> 新增至學生名冊
-                    </button>
+                    <h2 class="text-xl md:text-2xl font-black text-gray-800">即時數學競賽擂台</h2>
+                    <p class="text-xs md:text-sm text-gray-600">全班多人即時連線搶答！答對 +1 分、答錯 -1 分，先達標者奪冠！</p>
                 </div>
 
-                <div class="bg-white rounded-2xl border p-4">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="font-bold text-sm text-gray-700">📋 目前已建檔學生列表 (<span id="roster-count">0</span> 位)</span>
-                        <button onclick="loadRosterList()" class="text-xs text-indigo-600 font-bold hover:underline">
-                            <i class="fa-solid fa-arrows-rotate"></i> 重新載入
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- 老師建立擂台卡片 -->
+                    <div class="bg-white border-2 border-indigo-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition space-y-3 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center gap-2 text-indigo-700 font-extrabold text-base">
+                                <i class="fa-solid fa-chalkboard-user text-xl"></i> 我是老師：發起擂台
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">自訂題目單元、達標題數，生成專屬 QR 碼與代碼主持全班競賽。</p>
+                        </div>
+                        <button onclick="showCreateArenaView()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow text-sm transition">
+                            <i class="fa-solid fa-plus-circle mr-1"></i> 建立新擂台
                         </button>
                     </div>
-                    <div class="max-h-60 overflow-y-auto">
+
+                    <!-- 學生進入擂台卡片 -->
+                    <div class="bg-white border-2 border-amber-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition space-y-3 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center gap-2 text-amber-700 font-extrabold text-base">
+                                <i class="fa-solid fa-gamepad text-xl"></i> 我是學生：進入比賽
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">輸入擂台 6 碼代碼，可登入 Google 或直接輸入暱稱快速參賽！</p>
+                        </div>
+                        <button onclick="showJoinArenaView()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow text-sm transition">
+                            <i class="fa-solid fa-right-to-bracket mr-1"></i> 加入比賽
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 視圖 B：老師建立擂台設定畫面 -->
+            <div id="comp-create-view" class="hidden space-y-4">
+                <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-3.5">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <h3 class="font-extrabold text-gray-800 text-base flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-indigo-600"></i> 設定競賽擂台規則
+                        </h3>
+                        <button onclick="showCompHomeView()" class="text-xs font-bold text-gray-500 hover:text-gray-800">
+                            <i class="fa-solid fa-arrow-left mr-1"></i> 返回
+                        </button>
+                    </div>
+
+                    <!-- 比賽名稱 (選填) -->
+                    <div>
+                        <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
+                            🏷️ 比賽名稱（可自訂或留空）：
+                        </label>
+                        <input type="text" id="arena-name-input" placeholder="例：三年二班乘法爭霸賽" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <!-- 選擇測驗主題與單元 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                            <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
+                                📖 測驗主題：
+                            </label>
+                            <select id="arena-topic-select" onchange="updateArenaModeOptions()" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
+                                <option value="multiply">乘法運算</option>
+                                <option value="add">加法運算</option>
+                                <option value="sub">減法運算</option>
+                                <option value="divide">除法運算</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1">
+                                📂 題型單元：
+                            </label>
+                            <select id="arena-mode-select" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500">
+                                <!-- 動態填入 -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 獲勝題數設定：預設 5題、10題、自訂 (上限 20) -->
+                    <div>
+                        <label class="block font-bold text-xs md:text-sm text-gray-700 mb-1.5">
+                            🎯 獲勝達標題數（先達到此分數者獲勝）：
+                        </label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="flex items-center justify-center p-2.5 border-2 rounded-xl cursor-pointer font-bold text-xs md:text-sm bg-white hover:border-indigo-400">
+                                <input type="radio" name="arenaTarget" value="5" checked onchange="toggleCustomTarget(false)" class="mr-1.5 text-indigo-600"> 5 題獲勝
+                            </label>
+                            <label class="flex items-center justify-center p-2.5 border-2 rounded-xl cursor-pointer font-bold text-xs md:text-sm bg-white hover:border-indigo-400">
+                                <input type="radio" name="arenaTarget" value="10" onchange="toggleCustomTarget(false)" class="mr-1.5 text-indigo-600"> 10 題獲勝
+                            </label>
+                            <label class="flex items-center justify-center p-2.5 border-2 rounded-xl cursor-pointer font-bold text-xs md:text-sm bg-white hover:border-indigo-400">
+                                <input type="radio" name="arenaTarget" value="custom" onchange="toggleCustomTarget(true)" class="mr-1.5 text-indigo-600"> 自訂題數
+                            </label>
+                        </div>
+                        <div id="arena-custom-target-box" class="hidden mt-2 flex items-center gap-2">
+                            <span class="text-xs text-gray-600 font-bold">自訂題數（1~20題）：</span>
+                            <input type="number" id="arena-custom-target" min="1" max="20" value="15" class="w-20 p-2 bg-white border border-gray-300 rounded-xl text-center font-bold text-sm">
+                            <span class="text-[11px] text-gray-400">上限 20 題</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="createArenaSubmit()" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-base rounded-2xl shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-satellite-dish"></i> 立即建立並生成 QR 碼
+                </button>
+            </div>
+
+            <!-- 視圖 C：老師等候大廳 (顯示 6 碼、QR 碼、已進入學生名單、開始按鈕) -->
+            <div id="comp-lobby-view" class="hidden space-y-4">
+                <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-5 text-white shadow-lg text-center space-y-3">
+                    <div id="lobby-arena-title" class="text-lg md:text-xl font-black">競賽擂台準備中</div>
+                    <div class="text-xs bg-white/20 backdrop-blur-md px-3 py-1 rounded-full inline-block">
+                        單元：<span id="lobby-arena-unit">九九乘法</span> · 目標：<span id="lobby-arena-target" class="font-black text-amber-300">5</span> 題奪冠
+                    </div>
+
+                    <!-- 房間 QR 碼與 6 碼大字 -->
+                    <div class="bg-white text-gray-800 p-4 rounded-2xl max-w-sm mx-auto shadow-md space-y-3">
+                        <div class="text-xs font-bold text-gray-500">掃描下方 QR 碼或輸入代碼進入：</div>
+                        <div class="flex justify-center">
+                            <img id="lobby-qrcode-img" src="" alt="擂台 QR 碼" class="w-36 h-36 border-2 border-gray-200 rounded-xl shadow-sm">
+                        </div>
+                        <div class="text-xs text-gray-500">擂台專屬 6 碼：</div>
+                        <div id="lobby-arena-code" class="text-3xl md:text-4xl font-black text-indigo-600 tracking-widest select-all">
+                            ------
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 已入場學生名單列表 -->
+                <div class="bg-white border rounded-2xl p-4 shadow-sm space-y-2">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="text-xs md:text-sm font-extrabold text-gray-700">
+                            👥 已進入擂台選手 (<span id="lobby-player-count" class="text-indigo-600 font-bold">0</span> 人)
+                        </span>
+                        <span class="text-[11px] text-gray-400">全員到齊後請點擊下方開始</span>
+                    </div>
+                    <div id="lobby-player-list" class="flex flex-wrap gap-2 min-h-[50px] p-2 bg-gray-50 rounded-xl">
+                        <div class="text-xs text-gray-400 m-auto">等待學生加入中...</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="dismissArena()" class="py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl text-sm transition">
+                        解散擂台
+                    </button>
+                    <button onclick="startArenaMatch()" class="py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow text-sm transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-play"></i> 全員開始比賽！
+                    </button>
+                </div>
+            </div>
+
+            <!-- 視圖 D：學生加入擂台填寫介面 -->
+            <div id="comp-join-view" class="hidden space-y-4">
+                <div class="bg-amber-50/70 p-5 rounded-2xl border border-amber-200 space-y-3.5">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <h3 class="font-extrabold text-gray-800 text-base flex items-center gap-2">
+                            <i class="fa-solid fa-door-open text-amber-600"></i> 加入競賽擂台
+                        </h3>
+                        <button onclick="showCompHomeView()" class="text-xs font-bold text-gray-500 hover:text-gray-800">
+                            <i class="fa-solid fa-arrow-left mr-1"></i> 返回
+                        </button>
+                    </div>
+
+                    <!-- 擂台代碼輸入 -->
+                    <div>
+                        <label class="block font-bold text-xs text-gray-700 mb-1">
+                            🔑 輸入擂台 6 碼代碼：
+                        </label>
+                        <input type="text" id="join-code-input" maxlength="6" placeholder="例如: 849201" class="w-full p-3 bg-white border border-gray-300 rounded-xl text-center text-2xl font-black tracking-widest text-indigo-600 uppercase focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <!-- 參賽選手姓名 (支援登入或直接輸入) -->
+                    <div>
+                        <label class="block font-bold text-xs text-gray-700 mb-1">
+                            👤 參賽選手名稱（可直接輸入暱稱或以 Google 帳號帶入）：
+                        </label>
+                        <div class="flex gap-2">
+                            <input type="text" id="join-name-input" placeholder="請輸入姓名 / 暱稱" class="flex-1 p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-indigo-500">
+                            <button type="button" onclick="autoFillStudentName()" class="px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition">
+                                帶入身分
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="joinArenaSubmit()" class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-base rounded-2xl shadow-lg transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-arrow-right-to-bracket"></i> 進入等候大廳
+                </button>
+            </div>
+
+            <!-- 視圖 E：學生等候開始畫面 -->
+            <div id="comp-student-waiting-view" class="hidden text-center py-10 space-y-4 bg-gray-50 rounded-3xl border p-6">
+                <div class="w-16 h-16 mx-auto bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-3xl animate-bounce">
+                    <i class="fa-solid fa-hourglass-half"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-black text-gray-800">已進入擂台！</h3>
+                    <p class="text-xs text-gray-500 mt-1">參賽名稱：<b id="student-waiting-name" class="text-indigo-600">--</b></p>
+                </div>
+                <div class="bg-white p-3 rounded-2xl border max-w-xs mx-auto text-xs text-gray-600 space-y-1">
+                    <div>房間代碼：<b id="student-waiting-code" class="text-gray-800">--</b></div>
+                    <div>比賽目標：<b id="student-waiting-target" class="text-amber-600">-- 題獲勝</b></div>
+                    <div class="text-[11px] text-gray-400 pt-1">請注意老師投影畫面，老師點擊開始後將自動開戰！</div>
+                </div>
+            </div>
+
+            <!-- 視圖 F：學生比賽作答中畫面 (答對+1，答錯-1，最低0分) -->
+            <div id="comp-student-play-view" class="hidden space-y-4">
+                <!-- 頂部即時比分與進度條 -->
+                <div class="bg-gray-50 p-3 rounded-2xl border space-y-1.5">
+                    <div class="flex justify-between items-center text-xs md:text-sm font-bold">
+                        <span class="text-gray-600">選手：<span id="student-play-name" class="text-indigo-700">--</span></span>
+                        <span class="text-emerald-700 font-extrabold text-base">目前得分：<span id="student-my-score" class="text-2xl">0</span> 分</span>
+                        <span class="text-amber-600">目標：<span id="student-target-score">5</span> 分</span>
+                    </div>
+                    <!-- 達標進度條 -->
+                    <div class="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                        <div id="student-progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+
+                <!-- 題卡區 -->
+                <div class="flex flex-col items-center justify-center py-7 bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl shadow-inner text-white relative">
+                    <div class="text-4xl md:text-6xl font-black tracking-wider drop-shadow select-none" id="comp-card-question">
+                        -- × -- = ?
+                    </div>
+                    <div id="comp-feedback-text" class="mt-3 text-xs md:text-sm font-bold bg-white/20 backdrop-blur-md px-3 py-1 rounded-full select-none">
+                        答對 +1 分，答錯扣 1 分（最低 0 分）
+                    </div>
+                </div>
+
+                <!-- 輸入與螢幕大鍵盤 -->
+                <div class="bg-gray-50 p-3 rounded-2xl border space-y-2.5">
+                    <div class="flex justify-center items-center gap-2">
+                        <input type="number" id="comp-manual-input" placeholder="答案" class="w-28 p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none text-center text-xl font-bold bg-white" onkeydown="if(event.key==='Enter') submitCompAnswer()">
+                        <button onclick="submitCompAnswer()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition flex items-center gap-1.5 shrink-0">
+                            <i class="fa-solid fa-paper-plane"></i> 送出
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-1.5 max-w-xs mx-auto pt-1">
+                        <button onclick="pressCompKey('1')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">1</button>
+                        <button onclick="pressCompKey('2')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">2</button>
+                        <button onclick="pressCompKey('3')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">3</button>
+                        <button onclick="pressCompKey('4')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">4</button>
+                        <button onclick="pressCompKey('5')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">5</button>
+                        <button onclick="pressCompKey('6')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">6</button>
+                        <button onclick="pressCompKey('7')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">7</button>
+                        <button onclick="pressCompKey('8')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">8</button>
+                        <button onclick="pressCompKey('9')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">9</button>
+                        <button onclick="pressCompKey('clear')" class="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-sm rounded-xl shadow-sm border border-rose-200">清除</button>
+                        <button onclick="pressCompKey('0')" class="py-2.5 bg-white hover:bg-amber-50 active:bg-amber-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">0</button>
+                        <button onclick="pressCompKey('back')" class="py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-sm rounded-xl shadow-sm border border-amber-200">退格</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 視圖 G：老師監控戰況畫面 (含即時比分/隱藏比分開關) -->
+            <div id="comp-teacher-monitor-view" class="hidden space-y-4">
+                <div class="bg-gray-50 p-3.5 rounded-2xl border flex justify-between items-center flex-wrap gap-2">
+                    <div>
+                        <span class="text-xs text-gray-500 font-bold">擂台代碼：<b id="monitor-code" class="text-indigo-600 text-sm">--</b></span>
+                        <div class="text-sm font-black text-gray-800">目標分數：<span id="monitor-target" class="text-amber-600">5</span> 分</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <!-- 隱藏/顯示即時比分開關 -->
+                        <button id="toggle-score-visibility-btn" onclick="toggleScoresVisibility()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1">
+                            <i class="fa-solid fa-eye-slash"></i> 隱藏比分（防干擾）
+                        </button>
+                        <button onclick="stopArenaMatchManual()" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow transition">
+                            強制結束
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 戰況排行榜看板 -->
+                <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-3">
+                    <div class="flex justify-between items-center text-xs font-bold text-gray-500 border-b pb-2">
+                        <span>🔥 選手即時排名戰況</span>
+                        <span id="score-visibility-label" class="text-emerald-600 font-black">【公開比分中】</span>
+                    </div>
+
+                    <div id="monitor-player-board" class="space-y-2 max-h-72 overflow-y-auto">
+                        <!-- 即時產生各選手名條與進度條 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 視圖 H：頒獎台與結果表揚畫面 (第1名超大字外加金獎盃 + 2、3名階梯頒獎台) -->
+            <div id="comp-podium-view" class="hidden space-y-6">
+                <!-- 第一名冠絕全場超大字體與獎盃特寫 -->
+                <div class="text-center space-y-2 bg-gradient-to-b from-amber-50 to-yellow-100 p-6 rounded-3xl border-2 border-amber-300 shadow-md">
+                    <div class="text-6xl md:text-7xl champion-trophy text-amber-500 inline-block drop-shadow-md">
+                        🏆
+                    </div>
+                    <div class="text-xs uppercase tracking-widest text-amber-700 font-extrabold">CHAMPION · 冠軍霸主</div>
+                    <div id="podium-first-huge-name" class="text-3xl md:text-5xl font-black text-gray-900 tracking-wider">
+                        ---
+                    </div>
+                    <div id="podium-first-score-tag" class="text-sm font-extrabold text-amber-800 bg-amber-200/80 px-4 py-1 rounded-full inline-block">
+                        以 -- 分率先榮登擂台盟主！
+                    </div>
+                </div>
+
+                <!-- 2、1、3名階梯式頒獎台 (Podium) -->
+                <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-4">
+                    <div class="text-center font-extrabold text-sm text-gray-700 border-b pb-2">
+                        👑 擂台前三名頒獎典禮
+                    </div>
+                    
+                    <div class="flex items-end justify-center gap-3 pt-6 pb-2 max-w-sm mx-auto">
+                        <!-- 第二名 (左側) -->
+                        <div class="flex flex-col items-center flex-1">
+                            <span class="text-xl mb-1">🥈</span>
+                            <span id="podium-p2-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
+                            <span id="podium-p2-score" class="text-[11px] text-gray-500 font-semibold mb-1">--分</span>
+                            <div class="podium-2 w-full rounded-t-xl flex items-center justify-center text-white font-black text-xl shadow">
+                                2
+                            </div>
+                        </div>
+
+                        <!-- 第一名 (中間最高) -->
+                        <div class="flex flex-col items-center flex-1">
+                            <span class="text-2xl mb-1 champion-trophy">👑</span>
+                            <span id="podium-p1-name" class="text-sm md:text-base font-black text-amber-800 truncate max-w-[90px]">--</span>
+                            <span id="podium-p1-score" class="text-xs text-amber-700 font-extrabold mb-1">--分</span>
+                            <div class="podium-1 w-full rounded-t-xl flex items-center justify-center text-white font-black text-2xl shadow-lg border-2 border-amber-300">
+                                1
+                            </div>
+                        </div>
+
+                        <!-- 第三名 (右側) -->
+                        <div class="flex flex-col items-center flex-1">
+                            <span class="text-xl mb-1">🥉</span>
+                            <span id="podium-p3-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
+                            <span id="podium-p3-score" class="text-[11px] text-gray-500 font-semibold mb-1">--分</span>
+                            <div class="podium-3 w-full rounded-t-xl flex items-center justify-center text-white font-black text-lg shadow">
+                                3
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 全體選手成績排名總表 -->
+                <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-2">
+                    <div class="text-xs md:text-sm font-extrabold text-gray-700 border-b pb-2 flex justify-between">
+                        <span>📋 全體參賽選手英雄榜</span>
+                        <span class="text-gray-400">依得分排序</span>
+                    </div>
+                    <div class="max-h-56 overflow-y-auto">
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
                                 <tr class="bg-gray-100 text-gray-600 border-b">
-                                    <th class="p-2 font-bold">序號</th>
-                                    <th class="p-2 font-bold">學生姓名</th>
-                                    <th class="p-2 font-bold">Google 信箱</th>
-                                    <th class="p-2 font-bold text-center">操作</th>
+                                    <th class="p-2 font-bold text-center w-12">名次</th>
+                                    <th class="p-2 font-bold">選手姓名</th>
+                                    <th class="p-2 font-bold text-center">最終得分</th>
+                                    <th class="p-2 font-bold text-right">榮譽稱號</th>
                                 </tr>
                             </thead>
-                            <tbody id="roster-table-body">
-                                <tr>
-                                    <td colspan="4" class="p-4 text-center text-gray-400">尚未建立任何學生名單</td>
-                                </tr>
+                            <tbody id="podium-all-table-body">
+                                <!-- 填入名次 -->
                             </tbody>
                         </table>
                     </div>
                 </div>
-            </div>
 
-            <!-- 子分頁二：各學生測驗歷程成績 -->
-            <div id="admin-view-scores" class="hidden space-y-4">
-                <div class="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-100 flex flex-wrap items-center justify-between gap-2">
-                    <div class="flex items-center gap-2">
-                        <label class="text-xs font-extrabold text-gray-700">篩選學生：</label>
-                        <select id="score-filter-student" onchange="filterScoresTable()" class="p-1.5 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800">
-                            <option value="ALL">全部學生</option>
-                        </select>
-                    </div>
-                    <button onclick="loadScoresList()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition">
-                        <i class="fa-solid fa-rotate mr-1"></i> 刷新紀錄
+                <div class="text-center pt-2">
+                    <button onclick="showCompHomeView()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow transition text-sm">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> 返回競賽首頁
                     </button>
                 </div>
-
-                <div class="bg-white rounded-2xl border p-4">
-                    <div class="max-h-80 overflow-y-auto">
-                        <table class="w-full text-left text-xs border-collapse">
-                            <thead>
-                                <tr class="bg-gray-100 text-gray-700 border-b">
-                                    <th class="p-2 font-bold">測驗時間</th>
-                                    <th class="p-2 font-bold">學生姓名</th>
-                                    <th class="p-2 font-bold">Google帳號</th>
-                                    <th class="p-2 font-bold">主題 / 題型單元</th>
-                                    <th class="p-2 font-bold text-center">秒數</th>
-                                    <th class="p-2 font-bold text-center">答對/總題</th>
-                                    <th class="p-2 font-bold text-center">得分率</th>
-                                </tr>
-                            </thead>
-                            <tbody id="scores-table-body">
-                                <tr>
-                                    <td colspan="7" class="p-4 text-center text-gray-400">尚無測驗紀錄</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
             </div>
+
         </div>
 
-        <!-- ================= 老師登入後台自訂彈窗 ================= -->
-        <div id="teacher-pwd-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border space-y-4">
-                <div class="flex items-center gap-2 text-gray-800">
-                    <div class="w-8 h-8 rounded-xl bg-gray-900 text-amber-400 flex items-center justify-center">
-                        <i class="fa-solid fa-lock"></i>
-                    </div>
-                    <h3 class="font-extrabold text-base">請輸入教師後台密碼</h3>
-                </div>
-                <input type="password" id="teacher-pwd-input" placeholder="請輸入密碼" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeydown="if(event.key==='Enter') verifyTeacherPassword()">
-                <div id="teacher-pwd-msg" class="text-xs text-red-600 font-bold hidden">密碼錯誤，請重新輸入！</div>
-                <div class="grid grid-cols-2 gap-2 pt-1">
-                    <button onclick="closeTeacherPasswordModal()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
-                        取消
-                    </button>
-                    <button onclick="verifyTeacherPassword()" class="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow transition">
-                        驗證登入
-                    </button>
-                </div>
-            </div>
-        </div>
         <!-- ================= 模式二：題庫下載／列印專區 ================= -->
         <div id="worksheet-section" class="hidden space-y-4">
             <div class="bg-indigo-50/70 p-4 md:p-5 rounded-2xl border border-indigo-100 space-y-4 no-print">
@@ -463,9 +738,7 @@
                     <label class="block font-extrabold text-gray-800 text-sm mb-2">
                         <i class="fa-solid fa-list-check text-indigo-500 mr-1.5"></i> 選擇題型單元：
                     </label>
-                    <select id="ws-mode-select" onchange="generateWorksheetPreview()" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-sm text-gray-700">
-                        <!-- 動態依主題填入 -->
-                    </select>
+                    <select id="ws-mode-select" onchange="generateWorksheetPreview()" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-sm text-gray-700"></select>
                 </div>
 
                 <!-- 題目排序選項 -->
@@ -527,10 +800,8 @@
                         </div>
                     </div>
 
-                    <!-- 題目容器 (採用穩定逐列 3 欄排版，括號與答案緊接在等號後面) -->
-                    <div id="ws-questions-container" class="space-y-2 text-sm md:text-base font-semibold">
-                        <!-- 動態產生三欄題目列 -->
-                    </div>
+                    <!-- 題目容器 (逐列 3 欄排版) -->
+                    <div id="ws-questions-container" class="space-y-2 text-sm md:text-base font-semibold"></div>
 
                     <!-- 頁尾說明 -->
                     <div class="border-t border-gray-300 mt-6 pt-3 text-[11px] text-gray-400 flex justify-between items-center">
@@ -541,8 +812,139 @@
             </div>
         </div>
 
+        <!-- ================= 模式四：教師後台管理專區 ================= -->
+        <div id="teacher-section" class="hidden space-y-4 no-print">
+            <div class="flex justify-between items-center border-b pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-9 h-9 rounded-xl bg-gray-900 text-amber-400 flex items-center justify-center text-lg shadow">
+                        <i class="fa-solid fa-chalkboard-user"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg md:text-xl font-extrabold text-gray-800">教師成績管理後台</h2>
+                        <p class="text-xs text-gray-500">預設學生名冊授權與查詢學生測驗歷程數據</p>
+                    </div>
+                </div>
+                <button onclick="closeTeacherDashboard()" class="text-gray-500 hover:text-gray-800 px-3 py-1 text-sm font-bold bg-gray-100 rounded-xl">
+                    <i class="fa-solid fa-xmark mr-1"></i> 返回測驗
+                </button>
+            </div>
+
+            <div class="flex gap-2 border-b text-sm font-bold">
+                <button id="admin-subtab-roster" onclick="switchAdminTab('roster')" class="pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3">
+                    <i class="fa-solid fa-user-plus mr-1"></i> 學生名單管理
+                </button>
+                <button id="admin-subtab-scores" onclick="switchAdminTab('scores')" class="pb-2 text-gray-500 hover:text-indigo-600 px-3">
+                    <i class="fa-solid fa-chart-line mr-1"></i> 測驗成績歷程檢視
+                </button>
+            </div>
+
+            <!-- 子分頁一：名單設定 -->
+            <div id="admin-view-roster" class="space-y-4">
+                <div class="bg-gray-50 p-4 rounded-2xl border space-y-3">
+                    <h3 class="font-extrabold text-sm text-gray-800 flex items-center gap-2">
+                        <i class="fa-solid fa-address-book text-indigo-600"></i> 新增授權學生（姓名與 Google 帳號）
+                    </h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" id="roster-name-input" placeholder="學生真實姓名 (如: 陳小明)" class="p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <input type="email" id="roster-email-input" placeholder="學生 Google 信箱 (如: ming@gmail.com)" class="p-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button onclick="addStudentToRoster()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition text-sm flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-plus"></i> 新增至學生名冊
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-2xl border p-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-bold text-sm text-gray-700">📋 目前已建檔學生列表 (<span id="roster-count">0</span> 位)</span>
+                        <button onclick="loadRosterList()" class="text-xs text-indigo-600 font-bold hover:underline">
+                            <i class="fa-solid fa-arrows-rotate"></i> 重新載入
+                        </button>
+                    </div>
+                    <div class="max-h-60 overflow-y-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100 text-gray-600 border-b">
+                                    <th class="p-2 font-bold">序號</th>
+                                    <th class="p-2 font-bold">學生姓名</th>
+                                    <th class="p-2 font-bold">Google 信箱</th>
+                                    <th class="p-2 font-bold text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="roster-table-body">
+                                <tr>
+                                    <td colspan="4" class="p-4 text-center text-gray-400">尚未建立任何學生名單</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 子分頁二：成績歷程 -->
+            <div id="admin-view-scores" class="hidden space-y-4">
+                <div class="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-100 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-extrabold text-gray-700">篩選學生：</label>
+                        <select id="score-filter-student" onchange="filterScoresTable()" class="p-1.5 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-800">
+                            <option value="ALL">全部學生</option>
+                        </select>
+                    </div>
+                    <button onclick="loadScoresList()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition">
+                        <i class="fa-solid fa-rotate mr-1"></i> 刷新紀錄
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-2xl border p-4">
+                    <div class="max-h-80 overflow-y-auto">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100 text-gray-700 border-b">
+                                    <th class="p-2 font-bold">測驗時間</th>
+                                    <th class="p-2 font-bold">學生姓名</th>
+                                    <th class="p-2 font-bold">Google帳號</th>
+                                    <th class="p-2 font-bold">主題 / 題型單元</th>
+                                    <th class="p-2 font-bold text-center">秒數</th>
+                                    <th class="p-2 font-bold text-center">答對/總題</th>
+                                    <th class="p-2 font-bold text-center">得分率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scores-table-body">
+                                <tr>
+                                    <td colspan="7" class="p-4 text-center text-gray-400">尚無測驗紀錄</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 老師登入後台自訂彈窗 (密碼 Rccbok6869，無提示) -->
+        <div id="teacher-pwd-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl border space-y-4">
+                <div class="flex items-center gap-2 text-gray-800">
+                    <div class="w-8 h-8 rounded-xl bg-gray-900 text-amber-400 flex items-center justify-center">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <h3 class="font-extrabold text-base">請輸入教師後台密碼</h3>
+                </div>
+                <input type="password" id="teacher-pwd-input" placeholder="請輸入密碼" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeydown="if(event.key==='Enter') verifyTeacherPassword()">
+                <div id="teacher-pwd-msg" class="text-xs text-red-600 font-bold hidden">密碼錯誤，請重新輸入！</div>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="closeTeacherPasswordModal()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
+                        取消
+                    </button>
+                    <button onclick="verifyTeacherPassword()" class="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow transition">
+                        驗證登入
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
+
     <script>
+        // 全域遊戲與狀態變數
         let questions = [];
         let currentIndex = 0;
         let correctCount = 0;
@@ -555,364 +957,91 @@
         let isPaused = false;
         let lastTranscript = '';
 
-        // 學生身分與名冊快取
+        // 學生身分與名冊
         let currentAuthUser = null;
         let verifiedStudentName = null;
-        let localRoster = [
-            { name: "示範生-林小華", email: "student1@example.com" }
-        ];
+        let localRoster = [{ name: "示範生-林小華", email: "student1@example.com" }];
         let localScores = [];
 
-        // 題庫模式專用狀態
+        // 題庫模式狀態
         let currentWorksheetTopic = 'multiply';
+
+        // 競賽擂台狀態
+        let arenaState = null; // 當前擂台資料
+        let currentArenaId = null;
+        let myPlayerId = 'p_' + Math.random().toString(36).substring(2, 9);
+        let myPlayerName = '參賽選手';
+        let myCurrentScore = 0;
+        let isTeacherHost = false;
+        let hideScoresOnMonitor = false;
+        let compQuestionPool = [];
+        let compCurrentQ = null;
+        let arenaUnsubscribe = null;
+        const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('arena_sync_channel') : null;
 
         window.onload = function() {
             updateModeOptions();
             initWorksheetSection();
-        };
+            updateArenaModeOptions();
 
-        // Firebase 帳號狀態監聽
-        window.onFirebaseUserChange = function(user) {
-            currentAuthUser = user;
-            updateStudentAuthUI(user);
-            if (user && !user.isAnonymous) {
-                checkStudentInRoster(user.email);
+            // 若 URL 中帶有 arenaCode 參數則自動填入加入框
+            const urlParams = new URLSearchParams(window.location.search);
+            const arenaParam = urlParams.get('arena');
+            if (arenaParam) {
+                switchMainTab('competition');
+                showJoinArenaView();
+                document.getElementById('join-code-input').value = arenaParam;
+            }
+
+            // 監聽跨分頁廣播 (離線或本地多視窗同步降級機制)
+            if (broadcastChannel) {
+                broadcastChannel.onmessage = (event) => {
+                    handleLocalBroadcast(event.data);
+                };
             }
         };
 
-        async function handleAuthAction() {
-            if (!window._fb || !window._fb.auth) {
-                // 若無雲端金鑰，提供直接輸入姓名模擬登入
-                const name = prompt("請輸入您的姓名進行登入：", "林小華");
-                if (name) {
-                    currentAuthUser = { displayName: name, email: `${name.toLowerCase()}@local.edu`, isAnonymous: false };
-                    verifiedStudentName = name;
-                    updateStudentAuthUI(currentAuthUser);
-                }
-                return;
-            }
-
-            const { auth, signInWithPopup, signOut, GoogleAuthProvider } = window._fb;
-
-            if (auth.currentUser && !auth.currentUser.isAnonymous) {
-                try {
-                    await signOut(auth);
-                } catch (e) {
-                    console.warn(e);
-                }
-                currentAuthUser = null;
-                verifiedStudentName = null;
-                updateStudentAuthUI(null);
-            } else {
-                try {
-                    const provider = new GoogleAuthProvider();
-                    const result = await signInWithPopup(auth, provider);
-                    currentAuthUser = result.user;
-                    await checkStudentInRoster(result.user.email);
-                    updateStudentAuthUI(result.user);
-                } catch (err) {
-                    console.error("Google 登入失敗或已關閉視窗:", err);
-                }
-            }
-        }
-
-        async function checkStudentInRoster(email) {
-            if (!email) return;
-            const target = email.trim().toLowerCase();
-            
-            // 先找本地快取
-            const matchLocal = localRoster.find(r => r.email && r.email.trim().toLowerCase() === target);
-            if (matchLocal) {
-                verifiedStudentName = matchLocal.name;
-                updateStudentAuthUI(currentAuthUser);
-                return;
-            }
-
-            if (!window._fb || !window._fb.db) return;
-            const { db, appId, collection, getDocs } = window._fb;
-            try {
-                const rosterRef = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
-                const snap = await getDocs(rosterRef);
-                snap.forEach(d => {
-                    const data = d.data();
-                    if (data.email && data.email.trim().toLowerCase() === target) {
-                        verifiedStudentName = data.name;
-                    }
-                });
-                updateStudentAuthUI(currentAuthUser);
-            } catch (e) {
-                console.warn("名冊讀取略過:", e);
-            }
-        }
-
-        function updateStudentAuthUI(user) {
-            const nameSpan = document.getElementById('student-user-name');
-            const actionBtn = document.getElementById('auth-action-btn');
-
-            if (user && !user.isAnonymous) {
-                const displayName = verifiedStudentName || user.displayName || user.email?.split('@')[0] || '已登入學生';
-                nameSpan.innerText = `${displayName}`;
-                nameSpan.title = user.email || '';
-                actionBtn.innerText = "登出";
-                actionBtn.className = "ml-1 text-[11px] bg-rose-600 hover:bg-rose-700 text-white px-2 py-0.5 rounded-lg transition shadow-sm";
-            } else {
-                nameSpan.innerText = "訪客學生";
-                nameSpan.title = "未登入狀態";
-                actionBtn.innerText = "Google登入";
-                actionBtn.className = "ml-1 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded-lg transition shadow-sm";
-            }
-        }
-        // ================== 教師後台驗證與視圖 ==================
-        function openTeacherLoginModal() {
-            document.getElementById('teacher-pwd-input').value = '';
-            document.getElementById('teacher-pwd-msg').classList.add('hidden');
-            const modal = document.getElementById('teacher-pwd-modal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            setTimeout(() => document.getElementById('teacher-pwd-input').focus(), 100);
-        }
-
-        function closeTeacherPasswordModal() {
-            const modal = document.getElementById('teacher-pwd-modal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-        }
-
-        function verifyTeacherPassword() {
-            const input = document.getElementById('teacher-pwd-input').value;
-            // 預設教師後台密碼，不提供任何提示
-            if (input === 'Rccbok6869') {
-                closeTeacherPasswordModal();
-                showTeacherDashboard();
-            } else {
-                document.getElementById('teacher-pwd-msg').classList.remove('hidden');
-            }
-        }
-
-        function showTeacherDashboard() {
-            setActiveView('teacher');
-        }
-
-        function closeTeacherDashboard() {
-            setActiveView('interactive');
-        }
-
-        function switchAdminTab(subtab) {
-            const rosterBtn = document.getElementById('admin-subtab-roster');
-            const scoresBtn = document.getElementById('admin-subtab-scores');
-            const rosterView = document.getElementById('admin-view-roster');
-            const scoresView = document.getElementById('admin-view-scores');
-
-            if (subtab === 'roster') {
-                rosterBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
-                scoresBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
-                rosterView.classList.remove('hidden');
-                scoresView.classList.add('hidden');
-            } else {
-                scoresBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
-                rosterBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
-                scoresView.classList.remove('hidden');
-                rosterView.classList.add('hidden');
-            }
-        }
-
-        // 後台功能一：學生名冊建檔
-        async function addStudentToRoster() {
-            const name = document.getElementById('roster-name-input').value.trim();
-            const email = document.getElementById('roster-email-input').value.trim().toLowerCase();
-
-            if (!name || !email) return;
-
-            localRoster.unshift({ name, email, createdAt: new Date().toISOString() });
-
-            if (window._fb && window._fb.db) {
-                const { db, appId, collection, addDoc } = window._fb;
-                try {
-                    const rosterCol = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
-                    await addDoc(rosterCol, { name, email, createdAt: new Date().toISOString() });
-                } catch (e) {
-                    console.warn("遠端名冊同步備用:", e);
-                }
-            }
-
-            document.getElementById('roster-name-input').value = '';
-            document.getElementById('roster-email-input').value = '';
-            renderRosterTable(localRoster);
-        }
-
-        async function loadRosterList() {
-            const tbody = document.getElementById('roster-table-body');
-            tbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i>載入中...</td></tr>`;
-
-            if (window._fb && window._fb.db) {
-                const { db, appId, collection, getDocs } = window._fb;
-                try {
-                    const rosterRef = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
-                    const snap = await getDocs(rosterRef);
-                    const list = [];
-                    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    if (list.length > 0) localRoster = list;
-                } catch (err) {
-                    console.warn(err);
-                }
-            }
-            renderRosterTable(localRoster);
-        }
-
-        function renderRosterTable(list) {
-            const tbody = document.getElementById('roster-table-body');
-            document.getElementById('roster-count').innerText = list.length;
-
-            const filterSelect = document.getElementById('score-filter-student');
-            filterSelect.innerHTML = `<option value="ALL">全部學生</option>`;
-            list.forEach(stu => {
-                const opt = document.createElement('option');
-                opt.value = stu.email;
-                opt.innerText = `${stu.name} (${stu.email})`;
-                filterSelect.appendChild(opt);
-            });
-
-            if (list.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400">尚未建立任何學生名冊，請由上方輸入建立。</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = '';
-            list.forEach((item, idx) => {
-                const tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-gray-50";
-                tr.innerHTML = `
-                    <td class="p-2 text-gray-500 font-medium">${idx + 1}</td>
-                    <td class="p-2 font-bold text-gray-800">${item.name}</td>
-                    <td class="p-2 text-indigo-600 font-medium">${item.email}</td>
-                    <td class="p-2 text-center text-emerald-600 font-bold">已授權</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        // 後台功能二：成績記錄查詢
-        async function loadScoresList() {
-            const tbody = document.getElementById('scores-table-body');
-            tbody.innerHTML = `<tr><td colspan="7" class="p-3 text-center text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i>載入中...</td></tr>`;
-
-            if (window._fb && window._fb.db) {
-                const { db, appId, collection, getDocs } = window._fb;
-                try {
-                    const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'scores');
-                    const snap = await getDocs(scoresRef);
-                    const list = [];
-                    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    if (list.length > 0) localScores = list;
-                } catch (err) {
-                    console.warn(err);
-                }
-            }
-            localScores.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-            filterScoresTable();
-        }
-
-        function filterScoresTable() {
-            const filterEmail = document.getElementById('score-filter-student').value;
-            const tbody = document.getElementById('scores-table-body');
-            tbody.innerHTML = '';
-
-            let filtered = localScores;
-            if (filterEmail !== 'ALL') {
-                filtered = localScores.filter(item => (item.studentEmail || '').toLowerCase() === filterEmail.toLowerCase());
-            }
-
-            if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-400">尚無測驗成績紀錄</td></tr>`;
-                return;
-            }
-
-            filtered.forEach(record => {
-                const dateStr = record.timestamp ? new Date(record.timestamp).toLocaleString('zh-TW', { hour12: false }) : '未知時間';
-                const rate = record.totalCount > 0 ? Math.round((record.correctCount / record.totalCount) * 100) : 0;
-                const tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-gray-50";
-                tr.innerHTML = `
-                    <td class="p-2 text-gray-500 whitespace-nowrap">${dateStr}</td>
-                    <td class="p-2 font-bold text-gray-900">${record.studentName || '訪客學生'}</td>
-                    <td class="p-2 text-gray-600 text-[11px]">${record.studentEmail || '未登入'}</td>
-                    <td class="p-2 font-semibold text-indigo-700">${record.topicTitle} · ${record.modeName}</td>
-                    <td class="p-2 text-center text-gray-600">${record.timeLimit}s</td>
-                    <td class="p-2 text-center font-bold text-gray-800">${record.correctCount} / ${record.totalCount}</td>
-                    <td class="p-2 text-center font-black ${rate >= 80 ? 'text-emerald-600' : rate >= 60 ? 'text-amber-600' : 'text-rose-600'}">${rate}%</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        async function saveScoreRecord() {
-            const topicVal = document.querySelector('input[name="topic"]:checked')?.value || 'multiply';
-            const modeVal = document.querySelector('input[name="mode"]:checked')?.value || '';
-            const topicTitle = worksheetMeta[topicVal]?.title || topicVal;
-            const modeName = document.querySelector(`input[name="mode"][value="${modeVal}"]`)?.nextElementSibling?.innerText?.split('(')[0]?.trim() || modeVal;
-
-            let studentName = verifiedStudentName || (currentAuthUser && !currentAuthUser.isAnonymous ? currentAuthUser.displayName || currentAuthUser.email.split('@')[0] : "訪客學生");
-            let studentEmail = (currentAuthUser && !currentAuthUser.isAnonymous ? currentAuthUser.email : "guest@anonymous");
-
-            const record = {
-                studentName,
-                studentEmail,
-                topic: topicVal,
-                topicTitle,
-                mode: modeVal,
-                modeName,
-                timeLimit,
-                correctCount,
-                wrongCount: wrongRecords.length,
-                totalCount: questions.length,
-                timestamp: new Date().toISOString()
-            };
-
-            localScores.unshift(record);
-
-            if (window._fb && window._fb.db) {
-                const { db, appId, collection, addDoc } = window._fb;
-                try {
-                    const scoresCol = collection(db, 'artifacts', appId, 'public', 'data', 'scores');
-                    await addDoc(scoresCol, record);
-                } catch (e) {
-                    console.warn("雲端成績備份失敗:", e);
-                }
-            }
-        }
-        // ================== 集中管理的三方視圖切換器 (徹底解決畫面重疊問題) ==================
+        // ================== 集中管理的全域視圖切換器 (徹底解決畫面重疊與遺漏) ==================
         function setActiveView(view) {
             const interactiveSec = document.getElementById('interactive-section');
             const worksheetSec = document.getElementById('worksheet-section');
+            const competitionSec = document.getElementById('competition-section');
             const teacherSec = document.getElementById('teacher-section');
+
             const btnInteractive = document.getElementById('tab-btn-interactive');
             const btnWorksheet = document.getElementById('tab-btn-worksheet');
+            const btnCompetition = document.getElementById('tab-btn-competition');
             const subTitle = document.getElementById('app-subtitle');
 
-            // 全部強制先隱藏，確保畫面不重疊
+            // 全部強制隱藏
             interactiveSec.classList.add('hidden');
             worksheetSec.classList.add('hidden');
+            competitionSec.classList.add('hidden');
             teacherSec.classList.add('hidden');
+
+            // 重置按鈕外觀
+            btnInteractive.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
+            btnWorksheet.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
+            btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-amber-600";
 
             if (view === 'interactive') {
                 interactiveSec.classList.remove('hidden');
-                btnInteractive.className = "px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md";
-                btnWorksheet.className = "px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
+                btnInteractive.className = "px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md";
                 subTitle.innerText = "四大主題大挑戰，支援語音辨識、螢幕大鍵盤與錯題即時分析！";
             } else if (view === 'worksheet') {
                 worksheetSec.classList.remove('hidden');
-                btnWorksheet.className = "px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md";
-                btnInteractive.className = "px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
+                btnWorksheet.className = "px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-white text-indigo-700 shadow-md";
                 subTitle.innerText = "依四大運算單元產出紙本測驗卷或背誦卷，支援 A4 格式列印與 PDF 匯出！";
-                
                 if (isAnswering) abortGame();
                 generateWorksheetPreview();
+            } else if (view === 'competition') {
+                competitionSec.classList.remove('hidden');
+                btnCompetition.className = "px-3 md:px-4 py-2 rounded-xl font-extrabold text-xs md:text-sm transition-all duration-200 bg-amber-500 text-white shadow-md";
+                subTitle.innerText = "全班連線即時爭霸！答對 +1 分、答錯 -1 分，衝刺冠軍頒獎台！";
+                if (isAnswering) abortGame();
             } else if (view === 'teacher') {
                 teacherSec.classList.remove('hidden');
-                btnInteractive.className = "px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
-                btnWorksheet.className = "px-4 py-2 rounded-xl font-bold text-xs md:text-sm transition-all duration-200 text-gray-600 hover:text-indigo-600";
                 subTitle.innerText = "教師專用管理後台：設定學生名單與查詢各項測驗成績歷程";
-                
                 if (isAnswering) abortGame();
                 switchAdminTab('roster');
                 loadRosterList();
@@ -924,11 +1053,512 @@
             setActiveView(tab);
         }
 
+        // ================== 即時競賽擂台專用介面切換 ==================
+        function hideAllCompViews() {
+            document.getElementById('comp-home-view').classList.add('hidden');
+            document.getElementById('comp-create-view').classList.add('hidden');
+            document.getElementById('comp-lobby-view').classList.add('hidden');
+            document.getElementById('comp-join-view').classList.add('hidden');
+            document.getElementById('comp-student-waiting-view').classList.add('hidden');
+            document.getElementById('comp-student-play-view').classList.add('hidden');
+            document.getElementById('comp-teacher-monitor-view').classList.add('hidden');
+            document.getElementById('comp-podium-view').classList.add('hidden');
+        }
+
+        function showCompHomeView() {
+            hideAllCompViews();
+            document.getElementById('comp-home-view').classList.remove('hidden');
+        }
+
+        function showCreateArenaView() {
+            hideAllCompViews();
+            document.getElementById('comp-create-view').classList.remove('hidden');
+            updateArenaModeOptions();
+        }
+
+        function showJoinArenaView() {
+            hideAllCompViews();
+            document.getElementById('comp-join-view').classList.remove('hidden');
+            autoFillStudentName();
+        }
+
+        function toggleCustomTarget(show) {
+            const box = document.getElementById('arena-custom-target-box');
+            if (show) box.classList.remove('hidden');
+            else box.classList.add('hidden');
+        }
+
+        function updateArenaModeOptions() {
+            const topic = document.getElementById('arena-topic-select').value;
+            const select = document.getElementById('arena-mode-select');
+            select.innerHTML = '';
+            worksheetMeta[topic].modes.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.innerText = m.name;
+                select.appendChild(opt);
+            });
+        }
+
+        function autoFillStudentName() {
+            const nameInput = document.getElementById('join-name-input');
+            if (verifiedStudentName) {
+                nameInput.value = verifiedStudentName;
+            } else if (currentAuthUser && !currentAuthUser.isAnonymous) {
+                nameInput.value = currentAuthUser.displayName || currentAuthUser.email.split('@')[0];
+            } else if (!nameInput.value) {
+                nameInput.value = "選手 " + Math.floor(Math.random() * 90 + 10);
+            }
+        }
+
+        // ================== 建立擂台與加入擂台邏輯 ==================
+        async function createArenaSubmit() {
+            const arenaName = document.getElementById('arena-name-input').value.trim() || '數學計算爭霸擂台';
+            const topic = document.getElementById('arena-topic-select').value;
+            const mode = document.getElementById('arena-mode-select').value;
+            const modeName = document.getElementById('arena-mode-select').selectedOptions[0]?.text.split('(')[0].trim();
+            
+            let targetScore = 5;
+            const targetRadio = document.querySelector('input[name="arenaTarget"]:checked').value;
+            if (targetRadio === '5') targetScore = 5;
+            else if (targetRadio === '10') targetScore = 10;
+            else {
+                const customVal = parseInt(document.getElementById('arena-custom-target').value, 10);
+                targetScore = Math.min(Math.max(isNaN(customVal) ? 5 : customVal, 1), 20); // 嚴格上限 20
+            }
+
+            // 產生 6 位數純數字擂台碼
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            currentArenaId = code;
+            isTeacherHost = true;
+
+            arenaState = {
+                id: code,
+                title: arenaName,
+                topic: topic,
+                mode: mode,
+                modeName: modeName,
+                targetScore: targetScore,
+                status: 'waiting', // waiting | playing | ended
+                createdAt: new Date().toISOString(),
+                players: {},
+                winner: null
+            };
+
+            // 準備題目集
+            compQuestionPool = buildQuestionsByMode(topic, mode);
+
+            // 儲存至 Firebase (若有連線)
+            saveArenaState(arenaState);
+            listenToArena(currentArenaId);
+
+            // 更新老師等候大廳畫面
+            document.getElementById('lobby-arena-title').innerText = arenaName;
+            document.getElementById('lobby-arena-unit').innerText = `${worksheetMeta[topic].title} · ${modeName}`;
+            document.getElementById('lobby-arena-target').innerText = targetScore;
+            document.getElementById('lobby-arena-code').innerText = code;
+
+            // 產生 QR Code 圖片網址
+            const joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
+            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`;
+            document.getElementById('lobby-qrcode-img').src = qrApiUrl;
+
+            hideAllCompViews();
+            document.getElementById('comp-lobby-view').classList.remove('hidden');
+        }
+
+        async function joinArenaSubmit() {
+            const codeInput = document.getElementById('join-code-input').value.trim();
+            const nameInput = document.getElementById('join-name-input').value.trim() || '無名選手';
+
+            if (!codeInput || codeInput.length !== 6) {
+                alertCustomMessage("請輸入正確的 6 位數擂台代碼！");
+                return;
+            }
+
+            currentArenaId = codeInput;
+            myPlayerName = nameInput;
+            myCurrentScore = 0;
+            isTeacherHost = false;
+
+            // 先載入該擂台資料
+            let arenaData = await fetchArenaData(currentArenaId);
+            if (!arenaData) {
+                // 嘗試從本地廣播快取確認
+                if (arenaState && arenaState.id === currentArenaId) {
+                    arenaData = arenaState;
+                } else {
+                    alertCustomMessage("找不到該擂台或擂台已結束，請確認代碼！");
+                    return;
+                }
+            }
+
+            // 註冊玩家進房間
+            if (!arenaData.players) arenaData.players = {};
+            arenaData.players[myPlayerId] = {
+                id: myPlayerId,
+                name: myPlayerName,
+                score: 0,
+                joinedAt: new Date().toISOString()
+            };
+
+            await updateArenaPlayer(currentArenaId, myPlayerId, arenaData.players[myPlayerId]);
+            listenToArena(currentArenaId);
+
+            // 轉到學生等候畫面
+            document.getElementById('student-waiting-name').innerText = myPlayerName;
+            document.getElementById('student-waiting-code').innerText = currentArenaId;
+            document.getElementById('student-waiting-target').innerText = arenaData.targetScore + ' 題獲勝';
+
+            hideAllCompViews();
+            document.getElementById('comp-student-waiting-view').classList.remove('hidden');
+        }
+
+        // ================== 即時同步與監聽引擎 (Firebase Firestore + BroadcastChannel) ==================
+        function saveArenaState(state) {
+            if (window._fb && window._fb.db) {
+                const { db, appId, doc, setDoc } = window._fb;
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'arenas', state.id);
+                    setDoc(ref, state);
+                } catch (e) {
+                    console.warn("Firebase 儲存降級:", e);
+                }
+            }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'ARENA_SYNC', data: state });
+            }
+        }
+
+        async function updateArenaPlayer(arenaId, pId, playerData) {
+            if (arenaState && arenaState.id === arenaId) {
+                if (!arenaState.players) arenaState.players = {};
+                arenaState.players[pId] = playerData;
+            }
+            if (window._fb && window._fb.db) {
+                const { db, appId, doc, setDoc } = window._fb;
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'arenas', arenaId);
+                    await setDoc(ref, arenaState, { merge: true });
+                } catch(e) {}
+            }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'PLAYER_UPDATE', arenaId, pId, playerData });
+            }
+        }
+
+        async function fetchArenaData(arenaId) {
+            if (window._fb && window._fb.db) {
+                const { db, appId, doc, getDoc } = window._fb;
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'arenas', arenaId);
+                    const snap = await getDoc(ref);
+                    if (snap.exists()) return snap.data();
+                } catch(e) {}
+            }
+            return arenaState;
+        }
+
+        function listenToArena(arenaId) {
+            if (arenaUnsubscribe) {
+                arenaUnsubscribe();
+                arenaUnsubscribe = null;
+            }
+
+            if (window._fb && window._fb.db) {
+                const { db, appId, doc, onSnapshot } = window._fb;
+                try {
+                    const ref = doc(db, 'artifacts', appId, 'public', 'data', 'arenas', arenaId);
+                    arenaUnsubscribe = onSnapshot(ref, (snap) => {
+                        if (snap.exists()) {
+                            onArenaDataUpdated(snap.data());
+                        }
+                    }, (err) => console.warn(err));
+                } catch (e) {}
+            }
+        }
+
+        function handleLocalBroadcast(msg) {
+            if (!msg) return;
+            if (msg.type === 'ARENA_SYNC' && msg.data) {
+                if (currentArenaId === msg.data.id) {
+                    onArenaDataUpdated(msg.data);
+                }
+            } else if (msg.type === 'PLAYER_UPDATE' && msg.arenaId === currentArenaId) {
+                if (arenaState) {
+                    if (!arenaState.players) arenaState.players = {};
+                    arenaState.players[msg.pId] = msg.playerData;
+                    onArenaDataUpdated(arenaState);
+                }
+            }
+        }
+
+        // 核心更新回調：擂台狀態演進 (waiting -> playing -> ended)
+        function onArenaDataUpdated(data) {
+            arenaState = data;
+
+            // 1. 等候大廳更新學生名單 (老師視角)
+            if (isTeacherHost && arenaState.status === 'waiting') {
+                renderLobbyPlayers(arenaState.players || {});
+            }
+
+            // 2. 狀態由 waiting 轉為 playing
+            if (arenaState.status === 'playing') {
+                if (isTeacherHost) {
+                    // 老師切換至即時監控畫面
+                    hideAllCompViews();
+                    document.getElementById('comp-teacher-monitor-view').classList.remove('hidden');
+                    document.getElementById('monitor-code').innerText = arenaState.id;
+                    document.getElementById('monitor-target').innerText = arenaState.targetScore;
+                    renderMonitorBoard(arenaState.players || {});
+                } else {
+                    // 學生切換至答題畫面
+                    hideAllCompViews();
+                    document.getElementById('comp-student-play-view').classList.remove('hidden');
+                    document.getElementById('student-play-name').innerText = myPlayerName;
+                    document.getElementById('student-target-score').innerText = arenaState.targetScore;
+                    
+                    if (!compQuestionPool || compQuestionPool.length === 0) {
+                        compQuestionPool = buildQuestionsByMode(arenaState.topic, arenaState.mode);
+                    }
+                    if (!compCurrentQ) {
+                        nextCompQuestion();
+                    }
+                }
+            }
+
+            // 3. 即時比分監控更新 (老師視角)
+            if (isTeacherHost && arenaState.status === 'playing') {
+                renderMonitorBoard(arenaState.players || {});
+            }
+
+            // 4. 比賽結束：第一名達標，展示冠軍大獎盃與階梯頒獎台 (雙方皆看見)
+            if (arenaState.status === 'ended') {
+                renderPodiumAndResults(arenaState);
+            }
+        }
+
+        function renderLobbyPlayers(players) {
+            const container = document.getElementById('lobby-player-list');
+            const countElem = document.getElementById('lobby-player-count');
+            const pArray = Object.values(players);
+            countElem.innerText = pArray.length;
+
+            if (pArray.length === 0) {
+                container.innerHTML = `<div class="text-xs text-gray-400 m-auto">等待學生加入中...</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            pArray.forEach(p => {
+                const badge = document.createElement('div');
+                badge.className = "px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm";
+                badge.innerHTML = `<i class="fa-solid fa-user text-indigo-500"></i> ${p.name}`;
+                container.appendChild(badge);
+            });
+        }
+
+        function startArenaMatch() {
+            if (!arenaState) return;
+            const pCount = Object.keys(arenaState.players || {}).length;
+            if (pCount === 0) {
+                alertCustomMessage("目前尚無學生加入擂台，請等待學生加入後再開始！");
+                return;
+            }
+            arenaState.status = 'playing';
+            saveArenaState(arenaState);
+            onArenaDataUpdated(arenaState);
+        }
+
+        function dismissArena() {
+            if (arenaUnsubscribe) arenaUnsubscribe();
+            arenaState = null;
+            currentArenaId = null;
+            showCompHomeView();
+        }
+
+        // ================== 學生作答邏輯 (答對+1，答錯-1，最低0分) ==================
+        function nextCompQuestion() {
+            if (!compQuestionPool || compQuestionPool.length === 0) {
+                compQuestionPool = buildQuestionsByMode(arenaState?.topic || 'multiply', arenaState?.mode || 'mul-9x9-standard');
+            }
+            const randIdx = Math.floor(Math.random() * compQuestionPool.length);
+            compCurrentQ = compQuestionPool[randIdx];
+
+            const displayText = compCurrentQ.display ? compCurrentQ.display : `${compCurrentQ.a} ${compCurrentQ.op} ${compCurrentQ.b} = ?`;
+            document.getElementById('comp-card-question').innerText = displayText;
+            document.getElementById('comp-manual-input').value = '';
+            document.getElementById('comp-manual-input').focus();
+        }
+
+        function pressCompKey(key) {
+            const input = document.getElementById('comp-manual-input');
+            if (key === 'clear') input.value = '';
+            else if (key === 'back') input.value = input.value.slice(0, -1);
+            else input.value += key;
+        }
+
+        function submitCompAnswer() {
+            const inputVal = parseInt(document.getElementById('comp-manual-input').value, 10);
+            if (isNaN(inputVal) || !compCurrentQ) return;
+
+            const isCorrect = (inputVal === Number(compCurrentQ.ans));
+            const feedbackElem = document.getElementById('comp-feedback-text');
+
+            if (isCorrect) {
+                myCurrentScore += 1;
+                feedbackElem.innerHTML = `<span class="text-green-300 font-black">答對！+1 分 ⭕</span>`;
+            } else {
+                myCurrentScore = Math.max(0, myCurrentScore - 1); // 答錯扣 1 分，底限為 0 分
+                feedbackElem.innerHTML = `<span class="text-red-300 font-black">答錯！-1 分 ❌ (最低0分)</span>`;
+            }
+
+            // 更新畫面比分與進度條
+            document.getElementById('student-my-score').innerText = myCurrentScore;
+            const target = arenaState?.targetScore || 5;
+            const progress = Math.min(100, Math.round((myCurrentScore / target) * 100));
+            document.getElementById('student-progress-bar').style.width = progress + '%';
+
+            // 同步分數至雲端/廣播
+            if (arenaState && arenaState.players && arenaState.players[myPlayerId]) {
+                arenaState.players[myPlayerId].score = myCurrentScore;
+                updateArenaPlayer(currentArenaId, myPlayerId, arenaState.players[myPlayerId]);
+            }
+
+            // 檢查是否達到獲勝題數
+            if (myCurrentScore >= target) {
+                // 率先達標！結束比賽
+                arenaState.status = 'ended';
+                arenaState.winner = { id: myPlayerId, name: myPlayerName, score: myCurrentScore };
+                saveArenaState(arenaState);
+                onArenaDataUpdated(arenaState);
+                return;
+            }
+
+            setTimeout(nextCompQuestion, 400);
+        }
+
+        // ================== 老師監控戰況與排行榜渲染 ==================
+        function toggleScoresVisibility() {
+            hideScoresOnMonitor = !hideScoresOnMonitor;
+            const btn = document.getElementById('toggle-score-visibility-btn');
+            const label = document.getElementById('score-visibility-label');
+
+            if (hideScoresOnMonitor) {
+                btn.innerHTML = `<i class="fa-solid fa-eye"></i> 顯示比分`;
+                btn.className = "px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1";
+                label.innerText = "【比分已隱藏，防干擾中】";
+                label.className = "text-amber-600 font-black";
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-eye-slash"></i> 隱藏比分（防干擾）`;
+                btn.className = "px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow transition flex items-center gap-1";
+                label.innerText = "【公開比分中】";
+                label.className = "text-emerald-600 font-black";
+            }
+            if (arenaState) renderMonitorBoard(arenaState.players || {});
+        }
+
+        function stopArenaMatchManual() {
+            if (!arenaState) return;
+            arenaState.status = 'ended';
+            // 找出目前最高分者
+            const players = Object.values(arenaState.players || {}).sort((a,b) => b.score - a.score);
+            arenaState.winner = players[0] || { name: '無', score: 0 };
+            saveArenaState(arenaState);
+            onArenaDataUpdated(arenaState);
+        }
+
+        function renderMonitorBoard(playersMap) {
+            const container = document.getElementById('monitor-player-board');
+            const players = Object.values(playersMap).sort((a, b) => b.score - a.score);
+            const target = arenaState?.targetScore || 5;
+
+            container.innerHTML = '';
+            if (players.length === 0) {
+                container.innerHTML = `<div class="text-xs text-gray-400 text-center py-4">尚無選手資料</div>`;
+                return;
+            }
+
+            players.forEach((p, idx) => {
+                const percent = Math.min(100, Math.round((p.score / target) * 100));
+                const item = document.createElement('div');
+                item.className = "p-2.5 rounded-xl border bg-gray-50 flex items-center justify-between gap-3";
+
+                const displayScore = hideScoresOnMonitor ? '❓ 分' : `${p.score} / ${target} 分`;
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-[120px]">
+                        <span class="w-6 h-6 rounded-full ${idx === 0 ? 'bg-amber-400 text-amber-900' : 'bg-gray-200 text-gray-700'} flex items-center justify-center font-black text-xs">
+                            ${idx + 1}
+                        </span>
+                        <span class="font-extrabold text-xs text-gray-800 truncate max-w-[110px]">${p.name}</span>
+                    </div>
+                    <div class="flex-1 bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                        <div class="bg-indigo-600 h-full transition-all duration-300" style="width: ${hideScoresOnMonitor ? 0 : percent}%"></div>
+                    </div>
+                    <div class="text-xs font-black text-indigo-700 whitespace-nowrap min-w-[65px] text-right">
+                        ${displayScore}
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // ================== 頒獎台與結果英雄榜渲染 (第1名超大字外加金獎盃 + 2、3名階梯) ==================
+        function renderPodiumAndResults(arenaData) {
+            hideAllCompViews();
+            document.getElementById('comp-podium-view').classList.remove('hidden');
+
+            const players = Object.values(arenaData.players || {}).sort((a, b) => b.score - a.score);
+            const first = players[0] || { name: '無', score: 0 };
+            const second = players[1] || { name: '從缺', score: 0 };
+            const third = players[2] || { name: '從缺', score: 0 };
+
+            // 第一名巨大表揚區
+            document.getElementById('podium-first-huge-name').innerText = first.name;
+            document.getElementById('podium-first-score-tag').innerText = `以 ${first.score} 分率先達標奪得擂台盟主！`;
+
+            // 頒獎台三位選手名條
+            document.getElementById('podium-p1-name').innerText = first.name;
+            document.getElementById('podium-p1-score').innerText = `${first.score} 分`;
+
+            document.getElementById('podium-p2-name').innerText = second.name;
+            document.getElementById('podium-p2-score').innerText = second.name === '從缺' ? '-' : `${second.score} 分`;
+
+            document.getElementById('podium-p3-name').innerText = third.name;
+            document.getElementById('podium-p3-score').innerText = third.name === '從缺' ? '-' : `${third.score} 分`;
+
+            // 全體排名列表
+            const tbody = document.getElementById('podium-all-table-body');
+            tbody.innerHTML = '';
+            players.forEach((p, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-gray-50";
+
+                let medal = `${idx + 1}`;
+                let titleHonor = '努力奮戰';
+                if (idx === 0) { medal = '🥇 1'; titleHonor = '🏆 擂台盟主'; }
+                else if (idx === 1) { medal = '🥈 2'; titleHonor = '亞軍神捕'; }
+                else if (idx === 2) { medal = '🥉 3'; titleHonor = '季軍高手'; }
+
+                tr.innerHTML = `
+                    <td class="p-2 text-center font-black ${idx === 0 ? 'text-amber-600 font-extrabold text-sm' : 'text-gray-600'}">${medal}</td>
+                    <td class="p-2 font-bold text-gray-800">${p.name}</td>
+                    <td class="p-2 text-center font-extrabold text-indigo-700">${p.score}</td>
+                    <td class="p-2 text-right font-black ${idx < 3 ? 'text-amber-600' : 'text-gray-400'}">${titleHonor}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function alertCustomMessage(msg) {
+            alert(msg); // 瀏覽器標準對話框或自訂對話條
+        }
+
         // ================== 模式一：遊戲邏輯與主題樣式 ==================
         function updateModeOptions() {
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const container = document.getElementById('mode-container');
-            
             const topics = ['multiply', 'add', 'sub', 'divide'];
             const colorMap = {
                 multiply: {
@@ -975,7 +1605,6 @@
             });
 
             const currentTheme = colorMap[topic];
-
             if (topic === 'multiply') {
                 container.innerHTML = `
                     <div class="space-y-3">
@@ -992,7 +1621,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：十十乘法</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1006,7 +1634,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別三：特殊計算：25的倍數</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1016,7 +1643,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別四：特殊計算：125的倍數</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1026,7 +1652,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別五：11~20 × 2~10</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1054,7 +1679,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：10~19加一位數</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1064,7 +1688,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別三：和10運算</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1088,7 +1711,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：10~19減一位數</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1112,7 +1734,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：初級除法-20以內</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1122,7 +1743,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別三：中級除法-40以內</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1132,7 +1752,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別四：高級除法-70以內</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1142,7 +1761,6 @@
                                 </label>
                             </div>
                         </div>
-
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別五：進階除法-100以內</div>
                             <div class="grid grid-cols-1 gap-2">
@@ -1156,91 +1774,62 @@
                 `;
             }
         }
-        // 題目生成通用器 (供互動模式與題庫模式共用)
+
+        // 題目生成通用器
         function buildQuestionsByMode(topic, mode) {
             let list = [];
             if (topic === 'multiply') {
                 if (mode === 'mul-9x9-standard') {
-                    for (let i = 1; i <= 9; i++) {
-                        for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
-                    }
+                    for (let i = 1; i <= 9; i++) for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                 } else if (mode === 'mul-9x9-same') {
-                    for (let i = 1; i <= 9; i++) {
-                        for (let j = i; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
-                    }
+                    for (let i = 1; i <= 9; i++) for (let j = i; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                 } else if (mode === 'mul-10x10-standard') {
-                    for (let i = 1; i <= 10; i++) {
-                        for (let j = 1; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
-                    }
+                    for (let i = 1; i <= 10; i++) for (let j = 1; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                 } else if (mode === 'mul-10x10-same') {
-                    for (let i = 1; i <= 10; i++) {
-                        for (let j = i; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
-                    }
+                    for (let i = 1; i <= 10; i++) for (let j = i; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                 } else if (mode === 'mul-25') {
                     for (let i = 1; i <= 8; i++) list.push({ a: 25, b: i, op: '×', ans: 25 * i });
                 } else if (mode === 'mul-125') {
                     for (let i = 1; i <= 8; i++) list.push({ a: 125, b: i, op: '×', ans: 125 * i });
                 } else if (mode === 'mul-11_20x2_10') {
-                    for (let i = 11; i <= 20; i++) {
-                        for (let j = 2; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
-                    }
+                    for (let i = 11; i <= 20; i++) for (let j = 2; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                 }
             } else if (topic === 'add') {
                 if (mode === 'add1-distinct') {
-                    for (let i = 1; i <= 9; i++) {
-                        for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
-                    }
+                    for (let i = 1; i <= 9; i++) for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
                 } else if (mode === 'add1-same') {
-                    for (let i = 1; i <= 9; i++) {
-                        for (let j = i; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
-                    }
+                    for (let i = 1; i <= 9; i++) for (let j = i; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
                 } else if (mode === 'add10_19-standard') {
-                    for (let i = 10; i <= 19; i++) {
-                        for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
-                    }
+                    for (let i = 10; i <= 19; i++) for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '+', ans: i + j });
                 } else if (mode === 'add_sum10') {
                     for (let i = 1; i <= 9; i++) {
-                        list.push({ a: i, b: '?', op: '+', ans: 10 - i, display: `${i} + ? = 10`, answerVal: 10 - i });
-                        list.push({ a: '?', b: i, op: '+', ans: 10 - i, display: `? + ${i} = 10`, answerVal: 10 - i });
+                        list.push({ a: i, b: '?', op: '+', ans: 10 - i, display: `${i} + ? = 10` });
+                        list.push({ a: '?', b: i, op: '+', ans: 10 - i, display: `? + ${i} = 10` });
                     }
                 }
             } else if (topic === 'sub') {
                 if (mode === 'sub1-standard') {
-                    for (let i = 1; i <= 9; i++) {
-                        for (let j = 1; j <= i; j++) list.push({ a: i, b: j, op: '-', ans: i - j });
-                    }
+                    for (let i = 1; i <= 9; i++) for (let j = 1; j <= i; j++) list.push({ a: i, b: j, op: '-', ans: i - j });
                 } else if (mode === 'sub10_19-standard') {
-                    for (let i = 10; i <= 19; i++) {
-                        for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '-', ans: i - j });
-                    }
+                    for (let i = 10; i <= 19; i++) for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '-', ans: i - j });
                 }
             } else if (topic === 'divide') {
                 if (mode === 'div-basic') {
-                    for (let i = 2; i <= 9; i++) {
-                        for (let j = 1; j <= 9; j++) list.push({ a: i * j, b: i, op: '÷', ans: j });
-                    }
+                    for (let i = 2; i <= 9; i++) for (let j = 1; j <= 9; j++) list.push({ a: i * j, b: i, op: '÷', ans: j });
                 } else if (mode === 'div-20') {
-                    for (let n = 2; n <= 20; n++) {
-                        for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
-                    }
+                    for (let n = 2; n <= 20; n++) for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
                 } else if (mode === 'div-40') {
-                    for (let n = 2; n <= 40; n++) {
-                        for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
-                    }
+                    for (let n = 2; n <= 40; n++) for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
                 } else if (mode === 'div-70') {
-                    for (let n = 2; n <= 70; n++) {
-                        for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
-                    }
+                    for (let n = 2; n <= 70; n++) for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
                 } else if (mode === 'div-100') {
-                    for (let n = 2; n <= 100; n++) {
-                        for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
-                    }
+                    for (let n = 2; n <= 100; n++) for (let d = 2; d < n; d++) if (n % d === 0) list.push({ a: n, b: d, op: '÷', ans: n / d });
                 }
             }
             return list;
         }
 
-        // ================== 模式二：題庫下載與排版專用函式 ==================
+        // ================== 模式二：題庫下載／列印 ==================
         const worksheetMeta = {
             multiply: {
                 title: '乘法運算',
@@ -1296,15 +1885,10 @@
 
         function setWorksheetTopic(topicKey) {
             currentWorksheetTopic = topicKey;
-            const topics = ['multiply', 'add', 'sub', 'divide'];
-            
-            topics.forEach(k => {
+            ['multiply', 'add', 'sub', 'divide'].forEach(k => {
                 const btn = document.getElementById(`ws-btn-topic-${k}`);
-                if (k === topicKey) {
-                    btn.className = `p-2.5 border-2 rounded-xl text-xs md:text-sm font-extrabold transition ${worksheetMeta[k].btnClass}`;
-                } else {
-                    btn.className = `p-2.5 border-2 rounded-xl text-xs md:text-sm font-extrabold transition ${worksheetMeta[k].inactiveBtn}`;
-                }
+                if (k === topicKey) btn.className = `p-2.5 border-2 rounded-xl text-xs md:text-sm font-extrabold transition ${worksheetMeta[k].btnClass}`;
+                else btn.className = `p-2.5 border-2 rounded-xl text-xs md:text-sm font-extrabold transition ${worksheetMeta[k].inactiveBtn}`;
             });
 
             const select = document.getElementById('ws-mode-select');
@@ -1315,7 +1899,6 @@
                 opt.innerText = m.name;
                 select.appendChild(opt);
             });
-
             generateWorksheetPreview();
         }
 
@@ -1332,18 +1915,16 @@
                 labelTest.className = "flex flex-col items-center justify-center p-3 border-2 rounded-2xl cursor-pointer transition-all duration-200 bg-white/70 border-gray-200 text-gray-700 hover:bg-white";
             }
         }
+
         function generateWorksheetPreview() {
             const wsType = document.querySelector('input[name="wsType"]:checked').value;
             const mode = document.getElementById('ws-mode-select').value;
             const order = document.querySelector('input[name="wsOrder"]:checked').value;
 
             let list = buildQuestionsByMode(currentWorksheetTopic, mode);
-            if (order === 'random') {
-                list = [...list].sort(() => Math.random() - 0.5);
-            }
+            if (order === 'random') list = [...list].sort(() => Math.random() - 0.5);
 
             document.getElementById('ws-preview-count').innerText = list.length;
-
             const modeName = document.getElementById('ws-mode-select').selectedOptions[0]?.text || '';
             const paperTitle = document.getElementById('ws-paper-title');
             const paperSubtitle = document.getElementById('ws-paper-subtitle');
@@ -1404,20 +1985,14 @@
                                 `;
                             }
                         }
-                    } else {
-                        colElem.innerHTML = '';
                     }
-
                     rowElem.appendChild(colElem);
                 }
-
                 container.appendChild(rowElem);
             }
         }
 
-        function printWorksheet() {
-            window.print();
-        }
+        function printWorksheet() { window.print(); }
 
         function downloadWorksheetPDF() {
             const element = document.getElementById('worksheet-print-area');
@@ -1435,30 +2010,21 @@
                     margin:       [10, 10, 12, 10],
                     filename:     fileName,
                     image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { 
-                        scale: 2, 
-                        useCORS: true, 
-                        logging: false, 
-                        letterRendering: true,
-                        scrollY: 0
-                    },
+                    html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0 },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
                 };
 
                 html2pdf().from(element).set(opt).save().then(() => {
                     window.scrollTo(0, prevScrollY);
-                }).catch((err) => {
-                    console.error("PDF 匯出錯誤:", err);
-                    window.scrollTo(0, prevScrollY);
-                });
+                }).catch(() => window.scrollTo(0, prevScrollY));
             }, 200);
         }
-        // ================== 模式一：遊戲執行核心邏輯 ==================
+
+        // ================== 模式一：遊戲單人挑戰核心邏輯 ==================
         function initSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                console.warn("瀏覽器不支援語音辨識。");
                 document.getElementById('mic-status-text').innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 請使用下方螢幕鍵盤作答`;
                 return;
             }
@@ -1474,26 +2040,18 @@
                 let finalTranscript = '';
 
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalTranscript += event.results[i][0].transcript;
-                    } else {
-                        interimTranscript += event.results[i][0].transcript;
-                    }
+                    if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+                    else interimTranscript += event.results[i][0].transcript;
                 }
 
                 const transcriptText = finalTranscript || interimTranscript;
                 lastTranscript = transcriptText;
                 document.getElementById('transcript').innerText = transcriptText;
-
-                if (finalTranscript) {
-                    processSpokenAnswer(finalTranscript);
-                }
+                if (finalTranscript) processSpokenAnswer(finalTranscript);
             };
 
-            recognition.onerror = (event) => {
-                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-                    document.getElementById('mic-status-text').innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-300"></i> 無麥克風權限，請使用下方大鍵盤作答`;
-                }
+            recognition.onerror = () => {
+                document.getElementById('mic-status-text').innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 請使用下方大鍵盤作答`;
             };
 
             recognition.onend = () => {
@@ -1506,19 +2064,17 @@
         async function manualStartSpeech() {
             if (!isAnswering || isPaused) return;
             const micStatus = document.getElementById('mic-status-text');
-            micStatus.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-yellow-200"></i> 正在連線麥克風...`;
+            micStatus.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-yellow-200"></i> 連線麥克風...`;
 
             try {
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                if (navigator.mediaDevices?.getUserMedia) {
                     await navigator.mediaDevices.getUserMedia({ audio: true });
                 }
-                if (!recognition) {
-                    initSpeechRecognition();
-                }
+                if (!recognition) initSpeechRecognition();
                 recognition.start();
-                micStatus.innerHTML = `<i class="fa-solid fa-microphone text-green-300"></i> 麥克風聆聽中... (請口述或用鍵盤)`;
+                micStatus.innerHTML = `<i class="fa-solid fa-microphone text-green-300"></i> 聆聽中... (請口述或用鍵盤)`;
             } catch (err) {
-                micStatus.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-300"></i> 麥克風受阻，請使用下方螢幕鍵盤作答`;
+                micStatus.innerHTML = `<i class="fa-solid fa-keyboard text-amber-300"></i> 麥克風受阻，請用鍵盤`;
             }
         }
 
@@ -1543,8 +2099,7 @@
         }
 
         function startGame() {
-            timeLimit = parseInt(document.getElementById('time-limit').value);
-            
+            timeLimit = parseInt(document.getElementById('time-limit').value, 10);
             questions = generateQuestions();
             currentIndex = 0;
             correctCount = 0;
@@ -1619,10 +2174,10 @@
             currentIndex++;
             setTimeout(nextQuestion, 800);
         }
+
         function togglePause() {
             isPaused = !isPaused;
             updatePauseButtonUI();
-
             const card = document.getElementById('card-question');
             const micStatus = document.getElementById('mic-status-text');
 
@@ -1637,12 +2192,10 @@
                 const displayText = currentQ.display ? currentQ.display : `${currentQ.a} ${currentQ.op} ${currentQ.b} = ?`;
                 card.innerText = displayText;
                 micStatus.innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案 (或使用下方螢幕鍵盤)`;
-                
                 if (recognition) {
                     isAnswering = true;
                     try { recognition.start(); } catch(e) {}
                 }
-
                 timer = setInterval(() => {
                     if (isPaused) return;
                     timeLeft--;
@@ -1690,81 +2243,40 @@
 
         function processSpokenAnswer(text) {
             if (!isAnswering || isPaused) return;
-            
-            // 智慧修正同音字
-            text = text.replace(/把|爸|吧|爬/g, '八')
-                       .replace(/求|走|酒|久/g, '九')
-                       .replace(/是|事|市|室/g, '四');
-            
+            text = text.replace(/把|爸|吧|爬/g, '八').replace(/求|走|酒|久/g, '九').replace(/是|事|市|室/g, '四');
             document.getElementById('transcript').innerText = text;
 
             const numbers = text.match(/\d+/g);
-            let parsedNum = null;
-
-            if (numbers && numbers.length > 0) {
-                parsedNum = parseInt(numbers.join(''));
-            } else {
-                parsedNum = parseChineseNumberToInt(text);
-            }
-
-            if (parsedNum !== null) {
-                checkAnswer(parsedNum, text);
-            }
+            let parsedNum = numbers?.length > 0 ? parseInt(numbers.join(''), 10) : parseChineseNumberToInt(text);
+            if (parsedNum !== null) checkAnswer(parsedNum, text);
         }
 
         function parseChineseNumberToInt(str) {
             str = str.trim();
-            const map = {
-                '零': 0, '一': 1, '二': 2, '兩': 2, '三': 3, '四': 4,
-                '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
-            };
-
+            const map = { '零': 0, '一': 1, '二': 2, '兩': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
             if (str === '一千' || str === '千') return 1000;
-
             if (str.includes('千') || str.includes('百') || str.includes('十')) {
-                let val = 0;
-                let temp = 0;
-                let hasCN = false;
-
+                let val = 0, temp = 0, hasCN = false;
                 for (let i = 0; i < str.length; i++) {
                     let char = str[i];
-                    if (map[char] !== undefined) {
-                        temp = map[char];
-                        hasCN = true;
-                    } else if (char === '千') {
-                        val += (temp || 1) * 1000;
-                        temp = 0;
-                        hasCN = true;
-                    } else if (char === '百') {
-                        val += (temp || 1) * 100;
-                        temp = 0;
-                        hasCN = true;
-                    } else if (char === '十') {
-                        val += (temp || 1) * 10;
-                        temp = 0;
-                        hasCN = true;
-                    }
+                    if (map[char] !== undefined) { temp = map[char]; hasCN = true; }
+                    else if (char === '千') { val += (temp || 1) * 1000; temp = 0; hasCN = true; }
+                    else if (char === '百') { val += (temp || 1) * 100; temp = 0; hasCN = true; }
+                    else if (char === '十') { val += (temp || 1) * 10; temp = 0; hasCN = true; }
                 }
                 val += temp;
                 if (hasCN && val > 0) return val;
             }
-
-            let foundDigits = [];
-            for (let char of str) {
-                if (map[char] !== undefined) foundDigits.push(map[char]);
-            }
-
-            if (foundDigits.length >= 2) return foundDigits[0] * 10 + foundDigits[1];
-            else if (foundDigits.length === 1) return foundDigits[0];
-
+            let found = [];
+            for (let char of str) if (map[char] !== undefined) found.push(map[char]);
+            if (found.length >= 2) return found[0] * 10 + found[1];
+            if (found.length === 1) return found[0];
             return null;
         }
 
         function submitManualAnswer() {
-            const val = parseInt(document.getElementById('manual-input').value);
-            if (!isNaN(val)) {
-                checkAnswer(val, val.toString());
-            }
+            const val = parseInt(document.getElementById('manual-input').value, 10);
+            if (!isNaN(val)) checkAnswer(val, val.toString());
         }
 
         function checkAnswer(userAns, rawText) {
@@ -1774,9 +2286,7 @@
             clearInterval(timer);
 
             const currentQ = questions[currentIndex];
-            const numericUserAns = Number(userAns);
-            const numericCorrectAns = Number(currentQ.ans);
-            const isCorrect = (numericUserAns === numericCorrectAns);
+            const isCorrect = (Number(userAns) === Number(currentQ.ans));
 
             if (isCorrect) {
                 correctCount++;
@@ -1791,37 +2301,27 @@
                 });
                 showFeedback(false);
             }
-
             currentIndex++;
             setTimeout(nextQuestion, 800);
         }
 
         function showFeedback(isCorrect) {
             const card = document.getElementById('card-question');
-            if (isCorrect) {
-                card.innerHTML = `<span class="text-green-300">正確! O</span>`;
-            } else {
-                card.innerHTML = `<span class="text-red-300">錯誤! X</span>`;
-            }
+            card.innerHTML = isCorrect ? `<span class="text-green-300">正確! O</span>` : `<span class="text-red-300">錯誤! X</span>`;
         }
 
         function stopRecognition() {
-            if (recognition) {
-                try { recognition.stop(); } catch(e) {}
-            }
+            if (recognition) { try { recognition.stop(); } catch(e) {} }
         }
 
         function endGame(titleText) {
             stopRecognition();
             clearInterval(timer);
-
             document.getElementById('game-screen').classList.add('hidden');
             document.getElementById('result-screen').classList.remove('hidden');
             document.getElementById('result-title').innerText = titleText;
-
             document.getElementById('correct-count').innerText = correctCount;
             document.getElementById('wrong-count').innerText = wrongRecords.length;
-
             renderWrongTable();
             saveScoreRecord();
         }
@@ -1829,13 +2329,12 @@
         function renderWrongTable() {
             const container = document.getElementById('wrong-list-container');
             container.innerHTML = '';
-
             if (wrongRecords.length === 0) {
                 container.innerHTML = `<div class="text-center py-6 text-green-600 font-bold"><i class="fa-solid fa-circle-check text-2xl mb-1"></i><br>太神啦！全數答對，無任何錯題記錄！</div>`;
                 return;
             }
 
-            let tableHTML = `
+            let html = `
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
                         <tr class="bg-gray-100 text-gray-700 border-b">
@@ -1848,10 +2347,9 @@
                     </thead>
                     <tbody>
             `;
-
             wrongRecords.forEach((rec, idx) => {
-                tableHTML += `
-                    <tr class="border-b hover:bg-gray-50" style="page-break-inside: avoid; break-inside: avoid;">
+                html += `
+                    <tr class="border-b hover:bg-gray-50">
                         <td class="p-2 text-center text-gray-500">${idx + 1}</td>
                         <td class="p-2 font-bold text-indigo-700">${rec.question}</td>
                         <td class="p-2 text-red-600 font-medium">${rec.status}</td>
@@ -1860,69 +2358,293 @@
                     </tr>
                 `;
             });
-
-            tableHTML += `
-                    </tbody>
-                </table>
-            `;
-
-            container.innerHTML = tableHTML;
+            html += `</tbody></table>`;
+            container.innerHTML = html;
         }
 
         function downloadPDF() {
             const element = document.getElementById('pdf-export-area');
             const container = document.getElementById('wrong-list-container');
-            
-            const prevMaxHeight = container.style.maxHeight;
-            const prevOverflow = container.style.overflow;
-            
+            const prevMaxH = container.style.maxHeight;
             container.style.maxHeight = 'none';
-            container.style.overflow = 'visible';
-
-            const trs = element.querySelectorAll('tr');
-            trs.forEach(tr => {
-                tr.style.pageBreakInside = 'avoid';
-                tr.style.breakInside = 'avoid';
-            });
 
             const prevScrollY = window.scrollY;
             window.scrollTo(0, 0);
 
             setTimeout(() => {
-                const totalHeight = element.scrollHeight;
                 const opt = {
                     margin:       [10, 10, 15, 10],
                     filename:     '數學計算能力挑戰王_錯題記錄.pdf',
                     image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { 
-                        scale: 2, 
-                        useCORS: true, 
-                        logging: false, 
-                        letterRendering: true,
-                        scrollY: 0,
-                        height: totalHeight,
-                        windowHeight: totalHeight + 300
-                    },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                    html2canvas:  { scale: 2, useCORS: true, logging: false, letterRendering: true, scrollY: 0 },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
                 };
 
                 html2pdf().from(element).set(opt).save().then(() => {
-                    container.style.maxHeight = prevMaxHeight;
-                    container.style.overflow = prevOverflow;
+                    container.style.maxHeight = prevMaxH;
                     window.scrollTo(0, prevScrollY);
-                }).catch((err) => {
-                    console.error("PDF 匯出錯誤:", err);
-                    container.style.maxHeight = prevMaxHeight;
-                    container.style.overflow = prevOverflow;
+                }).catch(() => {
+                    container.style.maxHeight = prevMaxH;
                     window.scrollTo(0, prevScrollY);
                 });
-            }, 250);
+            }, 200);
         }
 
         function resetGame() {
             document.getElementById('result-screen').classList.add('hidden');
             document.getElementById('setup-screen').classList.remove('hidden');
+        }
+
+        // ================== 教師後台密碼與身分管理 ==================
+        function openTeacherLoginModal() {
+            document.getElementById('teacher-pwd-input').value = '';
+            document.getElementById('teacher-pwd-msg').classList.add('hidden');
+            const modal = document.getElementById('teacher-pwd-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => document.getElementById('teacher-pwd-input').focus(), 100);
+        }
+
+        function closeTeacherPasswordModal() {
+            const modal = document.getElementById('teacher-pwd-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function verifyTeacherPassword() {
+            const input = document.getElementById('teacher-pwd-input').value;
+            if (input === 'Rccbok6869') { // 密碼嚴格符合無提示
+                closeTeacherPasswordModal();
+                showTeacherDashboard();
+            } else {
+                document.getElementById('teacher-pwd-msg').classList.remove('hidden');
+            }
+        }
+
+        function showTeacherDashboard() { setActiveView('teacher'); }
+        function closeTeacherDashboard() { setActiveView('interactive'); }
+
+        function switchAdminTab(subtab) {
+            const rosterBtn = document.getElementById('admin-subtab-roster');
+            const scoresBtn = document.getElementById('admin-subtab-scores');
+            const rosterView = document.getElementById('admin-view-roster');
+            const scoresView = document.getElementById('admin-view-scores');
+
+            if (subtab === 'roster') {
+                rosterBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
+                scoresBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
+                rosterView.classList.remove('hidden');
+                scoresView.classList.add('hidden');
+            } else {
+                scoresBtn.className = "pb-2 text-indigo-600 border-b-2 border-indigo-600 px-3";
+                rosterBtn.className = "pb-2 text-gray-500 hover:text-indigo-600 px-3";
+                scoresView.classList.remove('hidden');
+                rosterView.classList.add('hidden');
+            }
+        }
+
+        async function addStudentToRoster() {
+            const name = document.getElementById('roster-name-input').value.trim();
+            const email = document.getElementById('roster-email-input').value.trim().toLowerCase();
+            if (!name || !email) return;
+
+            localRoster.unshift({ name, email, createdAt: new Date().toISOString() });
+            if (window._fb && window._fb.db) {
+                const { db, appId, collection, addDoc } = window._fb;
+                try {
+                    const rosterCol = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
+                    await addDoc(rosterCol, { name, email, createdAt: new Date().toISOString() });
+                } catch (e) {}
+            }
+            document.getElementById('roster-name-input').value = '';
+            document.getElementById('roster-email-input').value = '';
+            renderRosterTable(localRoster);
+        }
+
+        async function loadRosterList() {
+            if (window._fb && window._fb.db) {
+                const { db, appId, collection, getDocs } = window._fb;
+                try {
+                    const rosterRef = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
+                    const snap = await getDocs(rosterRef);
+                    const list = [];
+                    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                    if (list.length > 0) localRoster = list;
+                } catch (err) {}
+            }
+            renderRosterTable(localRoster);
+        }
+
+        function renderRosterTable(list) {
+            const tbody = document.getElementById('roster-table-body');
+            document.getElementById('roster-count').innerText = list.length;
+            const filterSelect = document.getElementById('score-filter-student');
+            filterSelect.innerHTML = `<option value="ALL">全部學生</option>`;
+            list.forEach(stu => {
+                const opt = document.createElement('option');
+                opt.value = stu.email;
+                opt.innerText = `${stu.name} (${stu.email})`;
+                filterSelect.appendChild(opt);
+            });
+
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400">尚未建立任何學生名單</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = '';
+            list.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-gray-50";
+                tr.innerHTML = `
+                    <td class="p-2 text-gray-500 font-medium">${idx + 1}</td>
+                    <td class="p-2 font-bold text-gray-800">${item.name}</td>
+                    <td class="p-2 text-indigo-600 font-medium">${item.email}</td>
+                    <td class="p-2 text-center text-emerald-600 font-bold">已授權</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function loadScoresList() {
+            if (window._fb && window._fb.db) {
+                const { db, appId, collection, getDocs } = window._fb;
+                try {
+                    const scoresRef = collection(db, 'artifacts', appId, 'public', 'data', 'scores');
+                    const snap = await getDocs(scoresRef);
+                    const list = [];
+                    snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                    if (list.length > 0) localScores = list;
+                } catch (err) {}
+            }
+            localScores.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+            filterScoresTable();
+        }
+
+        function filterScoresTable() {
+            const filterEmail = document.getElementById('score-filter-student').value;
+            const tbody = document.getElementById('scores-table-body');
+            tbody.innerHTML = '';
+
+            let filtered = (filterEmail === 'ALL') ? localScores : localScores.filter(item => (item.studentEmail || '').toLowerCase() === filterEmail.toLowerCase());
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-400">尚無測驗成績紀錄</td></tr>`;
+                return;
+            }
+
+            filtered.forEach(record => {
+                const dateStr = record.timestamp ? new Date(record.timestamp).toLocaleString('zh-TW', { hour12: false }) : '未知時間';
+                const rate = record.totalCount > 0 ? Math.round((record.correctCount / record.totalCount) * 100) : 0;
+                const tr = document.createElement('tr');
+                tr.className = "border-b hover:bg-gray-50";
+                tr.innerHTML = `
+                    <td class="p-2 text-gray-500 whitespace-nowrap">${dateStr}</td>
+                    <td class="p-2 font-bold text-gray-900">${record.studentName || '訪客學生'}</td>
+                    <td class="p-2 text-gray-600 text-[11px]">${record.studentEmail || '未登入'}</td>
+                    <td class="p-2 font-semibold text-indigo-700">${record.topicTitle} · ${record.modeName}</td>
+                    <td class="p-2 text-center text-gray-600">${record.timeLimit}s</td>
+                    <td class="p-2 text-center font-bold text-gray-800">${record.correctCount} / ${record.totalCount}</td>
+                    <td class="p-2 text-center font-black ${rate >= 80 ? 'text-emerald-600' : rate >= 60 ? 'text-amber-600' : 'text-rose-600'}">${rate}%</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function saveScoreRecord() {
+            const topicVal = document.querySelector('input[name="topic"]:checked')?.value || 'multiply';
+            const modeVal = document.querySelector('input[name="mode"]:checked')?.value || '';
+            const topicTitle = worksheetMeta[topicVal]?.title || topicVal;
+            const modeName = document.querySelector(`input[name="mode"][value="${modeVal}"]`)?.nextElementSibling?.innerText?.split('(')[0]?.trim() || modeVal;
+
+            let studentName = verifiedStudentName || (currentAuthUser && !currentAuthUser.isAnonymous ? currentAuthUser.displayName || currentAuthUser.email.split('@')[0] : "訪客學生");
+            let studentEmail = (currentAuthUser && !currentAuthUser.isAnonymous ? currentAuthUser.email : "guest@anonymous");
+
+            const record = {
+                studentName, studentEmail, topic: topicVal, topicTitle, mode: modeVal, modeName,
+                timeLimit, correctCount, wrongCount: wrongRecords.length, totalCount: questions.length,
+                timestamp: new Date().toISOString()
+            };
+            localScores.unshift(record);
+
+            if (window._fb && window._fb.db) {
+                const { db, appId, collection, addDoc } = window._fb;
+                try {
+                    const scoresCol = collection(db, 'artifacts', appId, 'public', 'data', 'scores');
+                    await addDoc(scoresCol, record);
+                } catch (e) {}
+            }
+        }
+
+        // ================== 學生 Google 登入驗證 ==================
+        window.onFirebaseUserChange = function(user) {
+            currentAuthUser = user;
+            updateStudentAuthUI(user);
+            if (user && !user.isAnonymous) checkStudentInRoster(user.email);
+        };
+
+        async function handleAuthAction() {
+            if (!window._fb || !window._fb.auth) {
+                const name = prompt("請輸入您的姓名進行登入：", "林小華");
+                if (name) {
+                    currentAuthUser = { displayName: name, email: `${name.toLowerCase()}@local.edu`, isAnonymous: false };
+                    verifiedStudentName = name;
+                    updateStudentAuthUI(currentAuthUser);
+                }
+                return;
+            }
+            const { auth, signInWithPopup, signOut, GoogleAuthProvider } = window._fb;
+            if (auth.currentUser && !auth.currentUser.isAnonymous) {
+                try { await signOut(auth); } catch (e) {}
+                currentAuthUser = null;
+                verifiedStudentName = null;
+                updateStudentAuthUI(null);
+            } else {
+                try {
+                    const provider = new GoogleAuthProvider();
+                    const result = await signInWithPopup(auth, provider);
+                    currentAuthUser = result.user;
+                    await checkStudentInRoster(result.user.email);
+                    updateStudentAuthUI(result.user);
+                } catch (err) {}
+            }
+        }
+
+        async function checkStudentInRoster(email) {
+            if (!email) return;
+            const target = email.trim().toLowerCase();
+            const matchLocal = localRoster.find(r => r.email && r.email.trim().toLowerCase() === target);
+            if (matchLocal) {
+                verifiedStudentName = matchLocal.name;
+                updateStudentAuthUI(currentAuthUser);
+                return;
+            }
+            if (!window._fb?.db) return;
+            const { db, appId, collection, getDocs } = window._fb;
+            try {
+                const rosterRef = collection(db, 'artifacts', appId, 'public', 'data', 'roster');
+                const snap = await getDocs(rosterRef);
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (data.email && data.email.trim().toLowerCase() === target) {
+                        verifiedStudentName = data.name;
+                    }
+                });
+                updateStudentAuthUI(currentAuthUser);
+            } catch (e) {}
+        }
+
+        function updateStudentAuthUI(user) {
+            const nameSpan = document.getElementById('student-user-name');
+            const actionBtn = document.getElementById('auth-action-btn');
+            if (user && !user.isAnonymous) {
+                const displayName = verifiedStudentName || user.displayName || user.email?.split('@')[0] || '已登入學生';
+                nameSpan.innerText = displayName;
+                actionBtn.innerText = "登出";
+                actionBtn.className = "ml-1 text-[11px] bg-rose-600 hover:bg-rose-700 text-white px-2 py-0.5 rounded-lg transition shadow-sm";
+            } else {
+                nameSpan.innerText = "訪客學生";
+                actionBtn.innerText = "Google登入";
+                actionBtn.className = "ml-1 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 rounded-lg transition shadow-sm";
+            }
         }
     </script>
 </body>
