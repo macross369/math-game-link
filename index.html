@@ -1,135 +1,146 @@
 <!-- ... existing code ... -->
-                    <p class="text-xs text-gray-500 mt-1">自訂題目單元、達標題數，生成專屬 QR 碼與代碼主持全班競賽。</p>
-                </div>
-                <button onclick="showCreateArenaView()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow text-sm transition">
-                    <i class="fa-solid fa-plus-circle mr-1"></i> 建立新擂台
-                </button>
-            </div>
-
-            <!-- 學生進入擂台卡片 -->
-            <div class="bg-white border-2 border-amber-200 rounded-2xl p-4 shadow-sm hover:shadow-md transition space-y-3 flex flex-col justify-between">
-                <div>
-                    <div class="flex items-center gap-2 text-amber-700 font-extrabold text-base">
-                        <i class="fa-solid fa-gamepad text-xl"></i> 我是學生：進入比賽
-                    </div>
-                    <p class="text-xs text-gray-500 mt-1">輸入擂台 3 碼代碼，可登入 Google 或直接輸入暱稱快速參賽！</p>
-                </div>
-                <button onclick="showJoinArenaView()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow text-sm transition">
-                    <i class="fa-solid fa-right-to-bracket mr-1"></i> 加入比賽
-                </button>
-            </div>
-        </div>
-    </div>
-<!-- ... existing code ... -->
-            <div class="bg-white text-gray-800 p-4 rounded-2xl max-w-sm mx-auto shadow-md space-y-3">
-                <div class="text-xs font-bold text-gray-500">掃描下方 QR 碼或輸入代碼進入：</div>
-                <div class="flex justify-center">
-                    <img id="lobby-qrcode-img" src="" alt="擂台 QR 碼" class="w-36 h-36 border-2 border-gray-200 rounded-xl shadow-sm">
-                </div>
-                <div class="text-xs text-gray-500">擂台專屬 3 碼：</div>
-                <div id="lobby-arena-code" class="text-4xl md:text-5xl font-black text-indigo-600 tracking-widest select-all">
-                    ---
-                </div>
-            </div>
-        </div>
-<!-- ... existing code ... -->
-            <div>
-                <label class="block font-bold text-xs text-gray-700 mb-1">
-                    🔑 輸入擂台 3 碼代碼：
-                </label>
-                <input type="text" id="join-code-input" maxlength="3" placeholder="例如: 849" class="w-full p-3 bg-white border border-gray-300 rounded-xl text-center text-3xl font-black tracking-widest text-indigo-600 uppercase focus:ring-2 focus:ring-indigo-500">
-            </div>
-
-            <div>
-                <label class="block font-bold text-xs text-gray-700 mb-1">
-                    👤 參賽選手名稱（可直接輸入暱稱或以 Google 帳號帶入）：
-                </label>
-<!-- ... existing code ... -->
-        <!-- 視圖 H：頒獎台與結果表揚畫面 -->
-        <div id="comp-podium-view" class="hidden space-y-6">
-            <div class="text-center space-y-2 bg-gradient-to-b from-amber-50 to-yellow-100 p-6 rounded-3xl border-2 border-amber-300 shadow-md">
-                <div class="text-6xl md:text-7xl champion-trophy text-amber-500 inline-block drop-shadow-md">
-                    🏆
-                </div>
-                <div class="text-xs uppercase tracking-widest text-amber-700 font-extrabold">CHAMPION · 冠軍霸主</div>
-                <div id="podium-first-huge-name" class="text-3xl md:text-5xl font-black text-gray-900 tracking-wider">
-                    ---
-                </div>
-                <div id="podium-first-score-tag" class="text-sm font-extrabold text-amber-800 bg-amber-200/80 px-4 py-1 rounded-full inline-block">
-                    以 -- 分率先榮登擂台盟主！
-                </div>
-            </div>
-
-            <!-- 階梯頒獎台 -->
-            <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-4">
-                <div class="text-center font-extrabold text-sm text-gray-700 border-b pb-2">
-                    👑 擂台前三名頒獎典禮
-                </div>
-                
-                <div class="flex items-end justify-center gap-3 pt-6 pb-2 max-w-sm mx-auto">
-                    <div class="flex flex-col items-center flex-1">
-                        <span class="text-xl mb-1">🥈</span>
-                        <span id="podium-p2-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
-                        <span id="podium-p2-score" class="text-[11px] text-gray-500 font-semibold mb-1">--分</span>
-                        <div class="podium-2 w-full rounded-t-xl flex items-center justify-center text-white font-black text-xl shadow">
-                            2
+                    <div>
+                        <label class="block font-bold text-xs text-gray-700 mb-1">
+                            🎯 獲勝達標題數：
+                        </label>
+                        <div class="grid grid-cols-3 gap-2 text-xs">
+                            <label class="flex items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-xl cursor-pointer">
+                                <input type="radio" name="arenaTarget" value="5" checked class="text-indigo-600"> 5 題獲勝
+                            </label>
+                            <label class="flex items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-xl cursor-pointer">
+                                <input type="radio" name="arenaTarget" value="10" class="text-indigo-600"> 10 題獲勝
+                            </label>
+                            <label class="flex items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-xl cursor-pointer">
+                                <input type="radio" name="arenaTarget" value="custom" class="text-indigo-600"> 自訂(≦20)
+                            </label>
                         </div>
+                        <input type="number" id="arena-custom-target" min="1" max="20" placeholder="輸入自訂題數 (1~20)" class="mt-2 w-full p-2 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-800 hidden">
                     </div>
 
-                    <div class="flex flex-col items-center flex-1">
-                        <span class="text-2xl mb-1 champion-trophy">👑</span>
-                        <span id="podium-p1-name" class="text-sm md:text-base font-black text-amber-800 truncate max-w-[90px]">--</span>
-                        <span id="podium-p1-score" class="text-xs text-amber-700 font-extrabold mb-1">--分</span>
-                        <div class="podium-1 w-full rounded-t-xl flex items-center justify-center text-white font-black text-2xl shadow-lg border-2 border-amber-300">
-                            1
+                    <!-- 語音輸入控制開關 -->
+                    <div class="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-xl">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-microphone text-indigo-600 text-sm"></i>
+                            <div>
+                                <div class="text-xs font-bold text-gray-800">允許學生使用語音輸入</div>
+                                <div class="text-[11px] text-gray-400">關閉後學生只能使用螢幕鍵盤作答</div>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="flex flex-col items-center flex-1">
-                        <span class="text-xl mb-1">🥉</span>
-                        <span id="podium-p3-name" class="text-xs md:text-sm font-bold text-gray-800 truncate max-w-[80px]">--</span>
-                        <span id="podium-p3-score" class="text-[11px] text-gray-500 font-semibold mb-1">--分</span>
-                        <div class="podium-3 w-full rounded-t-xl flex items-center justify-center text-white font-black text-lg shadow">
-                            3
-                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="arena-enable-speech" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
                     </div>
                 </div>
-            </div>
 
-            <!-- 英雄榜 -->
-            <div class="bg-white rounded-2xl border p-4 shadow-sm space-y-2">
-                <div class="text-xs md:text-sm font-extrabold text-gray-700 border-b pb-2 flex justify-between">
-                    <span>📋 全體參賽選手英雄榜</span>
-                    <span class="text-gray-400">依得分排序</span>
-                </div>
-                <div class="max-h-56 overflow-y-auto">
-                    <table class="w-full text-left text-xs border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100 text-gray-600 border-b">
-                                <th class="p-2 font-bold text-center w-12">名次</th>
-                                <th class="p-2 font-bold">選手姓名</th>
-                                <th class="p-2 font-bold text-center">最終得分</th>
-                                <th class="p-2 font-bold text-right">榮譽稱號</th>
-                            </tr>
-                        </thead>
-                        <tbody id="podium-all-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- 老師主持續賽與首頁控制按鈕列 -->
-            <div class="flex flex-col sm:flex-row justify-center items-center gap-3 pt-2">
-                <div id="host-rematch-controls" class="hidden w-full sm:w-auto">
-                    <button onclick="openRematchModal()" class="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl shadow-lg transition text-sm flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-rotate-right"></i> 原擂台再比一場 (調整/直接開打)
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="showCompHomeView()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
+                        取消返回
+                    </button>
+                    <button onclick="createArenaSubmit()" class="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-qrcode"></i> 建立並生成代碼
                     </button>
                 </div>
-                <button onclick="showCompHomeView()" class="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow transition text-sm flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-house"></i> 返回競賽首頁
-                </button>
             </div>
         </div>
+<!-- ... existing code ... -->
+        <!-- 視圖 C：老師等候大廳 (顯示 QR 與代碼) -->
+        <div id="comp-lobby-view" class="hidden space-y-4">
+            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 rounded-2xl text-white text-center space-y-1 shadow-md">
+                <div class="text-xs uppercase tracking-widest text-indigo-200 font-bold">擂台已就緒 · 等待選手進入</div>
+                <h3 id="lobby-arena-title" class="text-xl font-black">---</h3>
+                <div class="flex items-center justify-center gap-3 text-xs text-indigo-100">
+                    <span id="lobby-arena-unit">--</span>
+                    <span>|</span>
+                    <span>達標目標：<b id="lobby-arena-target" class="text-amber-300">--</b> 題</span>
+                    <span>|</span>
+                    <span id="lobby-arena-speech-badge" class="font-bold text-amber-200">語音：開啟</span>
+                </div>
+            </div>
+<!-- ... existing code ... -->
+        <!-- 視圖 D：學生等候畫面 -->
+        <div id="comp-student-waiting-view" class="hidden space-y-5 text-center py-6">
+            <div class="w-16 h-16 bg-amber-100 text-amber-600 rounded-3xl mx-auto flex items-center justify-center text-2xl shadow-inner animate-pulse">
+                <i class="fa-solid fa-gamepad"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-black text-gray-800">已成功加入擂台！</h3>
+                <p class="text-xs text-gray-500 mt-1">參賽選手：<b id="student-waiting-name" class="text-indigo-600 text-sm">--</b></p>
+                <p class="text-xs text-gray-500">擂台代碼：<b id="student-waiting-code" class="text-amber-600 font-bold">---</b> · 目標：<span id="student-waiting-target">--</span></p>
+                <p class="text-xs text-gray-400 mt-0.5">語音輸入：<span id="student-waiting-speech-badge" class="font-bold">--</span></p>
+            </div>
+            <div class="p-4 bg-gray-50 border rounded-2xl max-w-sm mx-auto space-y-2">
+                <div class="text-xs font-bold text-gray-600 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-hourglass-half text-amber-500 animate-spin"></i> 等待老師發起開戰廣播...
+                </div>
+                <div class="text-[11px] text-gray-400">老師在主控台點擊「全員開戰」後，您的畫面將自動進入比賽答題區！</div>
+            </div>
+        </div>
+<!-- ... existing code ... -->
+        <!-- 視圖 F：學生比賽作答介面 -->
+        <div id="comp-student-play-view" class="hidden space-y-4">
+            <!-- 頂部資訊列 -->
+            <div class="flex justify-between items-center bg-gray-50 p-3 rounded-2xl border">
+                <div class="text-xs font-bold text-gray-700">
+                    選手：<span id="student-play-name" class="text-indigo-600">--</span>
+                </div>
+                <div class="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-800 rounded-full font-black text-xs md:text-sm">
+                    得分：<span id="student-my-score" class="text-base text-amber-900">0</span> / <span id="student-target-score">--</span>
+                </div>
+            </div>
 
+            <!-- 進度條 -->
+            <div class="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                <div id="student-progress-bar" class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full w-0 transition-all duration-300"></div>
+            </div>
+
+            <!-- 題目卡片 (含語音狀態點擊切換) -->
+            <div id="comp-card-box" onclick="manualStartCompSpeech()" title="點擊啟用麥克風" class="flex flex-col items-center justify-center py-7 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-inner text-white relative overflow-hidden transition cursor-pointer select-none">
+                <div class="text-4xl md:text-6xl font-black tracking-wider drop-shadow-md select-none" id="comp-card-question">
+                    -- × -- = ?
+                </div>
+                <div class="mt-4 flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-full text-xs md:text-sm font-medium animate-pulse select-none text-center" id="comp-mic-status-text">
+                    <i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答
+                </div>
+            </div>
+
+            <!-- 答題輸入與大鍵盤區 -->
+            <div class="space-y-3 bg-gray-50 p-3.5 rounded-2xl border">
+                <div id="comp-transcript-container" class="flex items-center justify-between text-xs text-gray-500">
+                    <span>語音辨識：<b id="comp-transcript" class="text-indigo-600 italic">（等待中...）</b></span>
+                    <span class="text-gray-400">說出數字立即送出</span>
+                </div>
+
+                <div class="flex justify-center items-center gap-2">
+                    <input type="number" id="comp-manual-input" placeholder="答案" class="w-28 p-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center text-xl font-bold bg-white" onkeydown="if(event.key==='Enter') submitCompManualAnswer()">
+                    <button onclick="submitCompManualAnswer()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition flex items-center gap-1.5 shrink-0">
+                        <i class="fa-solid fa-paper-plane"></i> 送出
+                    </button>
+                </div>
+
+                <!-- 螢幕觸控數字大鍵盤 -->
+                <div class="grid grid-cols-3 gap-1.5 max-w-xs mx-auto pt-1">
+                    <button onclick="pressCompKey('1')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">1</button>
+                    <button onclick="pressCompKey('2')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">2</button>
+                    <button onclick="pressCompKey('3')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">3</button>
+                    <button onclick="pressCompKey('4')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">4</button>
+                    <button onclick="pressCompKey('5')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">5</button>
+                    <button onclick="pressCompKey('6')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">6</button>
+                    <button onclick="pressCompKey('7')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">7</button>
+                    <button onclick="pressCompKey('8')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">8</button>
+                    <button onclick="pressCompKey('9')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">9</button>
+                    <button onclick="pressCompKey('clear')" class="py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-sm rounded-xl shadow-sm border border-rose-200 flex items-center justify-center gap-1"><i class="fa-solid fa-rotate-left"></i> 清除</button>
+                    <button onclick="pressCompKey('0')" class="py-2.5 bg-white hover:bg-indigo-50 active:bg-indigo-100 text-gray-800 font-extrabold text-lg rounded-xl shadow-sm border border-gray-200">0</button>
+                    <button onclick="pressCompKey('back')" class="py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-sm rounded-xl shadow-sm border border-amber-200 flex items-center justify-center gap-1"><i class="fa-solid fa-delete-left"></i> 退格</button>
+                </div>
+            </div>
+
+            <!-- 計分規則與即時答對反饋提示 -->
+            <div id="comp-feedback-text" class="text-center text-xs font-semibold text-gray-500 py-1">
+                答對 +1 分，答錯扣 1 分（最低 0 分）
+            </div>
+        </div>
+<!-- ... existing code ... -->
         <!-- 原擂台續賽設定彈窗 (老師專用) -->
         <div id="rematch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border space-y-4">
@@ -169,6 +180,21 @@
                             <option value="20">20 題獲勝 (極限)</option>
                         </select>
                     </div>
+
+                    <!-- 續賽語音開關 -->
+                    <div class="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-xl">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-microphone text-indigo-600 text-sm"></i>
+                            <div>
+                                <div class="text-xs font-bold text-gray-800">允許學生使用語音輸入</div>
+                                <div class="text-[11px] text-gray-400">關閉後本輪僅能以鍵盤作答</div>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="rematch-enable-speech" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-1">
@@ -181,16 +207,33 @@
                 </div>
             </div>
         </div>
-
-    </div>
-    <script>
-        // ... existing code ...
+<!-- ... existing code ... -->
+        // 競賽擂台狀態管理
+        let currentArenaId = null;
+        let isTeacherHost = false;
+        let myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
+        let myPlayerName = '';
+        let myCurrentScore = 0;
+        let compQuestionPool = [];
+        let compCurrentQ = null;
+        let compRecognition = null;
+        let isCompAnswering = false;
+        let compLastTranscript = '';
+        let isScoreHidden = false;
+        let hostPeer = null;
+        let clientPeer = null;
+        let clientConn = null;
+        let connectedClients = {};
+        let arenaState = null;
+        let arenaUnsubscribe = null;
+// ... existing code ...
         // 建立擂台與加入擂台邏輯
         async function createArenaSubmit() {
             const arenaName = document.getElementById('arena-name-input').value.trim() || '數學計算爭霸擂台';
             const topic = document.getElementById('arena-topic-select').value;
             const mode = document.getElementById('arena-mode-select').value;
             const modeName = document.getElementById('arena-mode-select').selectedOptions[0]?.text.split('(')[0].trim() || '預設單元';
+            const enableSpeech = document.getElementById('arena-enable-speech').checked;
             
             let targetScore = 5;
             const targetRadio = document.querySelector('input[name="arenaTarget"]:checked').value;
@@ -213,6 +256,7 @@
                 mode: mode,
                 modeName: modeName,
                 targetScore: targetScore,
+                enableSpeech: enableSpeech,
                 status: 'waiting',
                 createdAt: new Date().toISOString(),
                 players: {},
@@ -230,6 +274,8 @@
             document.getElementById('lobby-arena-unit').innerText = `${worksheetMeta[topic].title} · ${modeName}`;
             document.getElementById('lobby-arena-target').innerText = targetScore;
             document.getElementById('lobby-arena-code').innerText = code;
+            document.getElementById('lobby-arena-speech-badge').innerText = enableSpeech ? '語音：已開啟' : '語音：已停用';
+            document.getElementById('lobby-arena-speech-badge').className = enableSpeech ? 'font-bold text-amber-200' : 'font-bold text-red-200';
 
             const joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
             const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`;
@@ -238,90 +284,21 @@
             hideAllCompViews();
             document.getElementById('comp-lobby-view').classList.remove('hidden');
         }
-        // ... existing code ...
-        async function joinArenaSubmit() {
-            const codeInput = document.getElementById('join-code-input').value.trim();
-            const nameInput = document.getElementById('join-name-input').value.trim() || '無名選手';
-
-            // 驗證 3 碼代碼
-            if (!codeInput || codeInput.length !== 3) {
-                showToast("請輸入正確的 3 位數擂台代碼！");
-                return;
-            }
-
-            currentArenaId = codeInput;
-            myPlayerName = nameInput;
-            myCurrentScore = 0;
-            isTeacherHost = false;
-
-            showToast("正在連線進入擂台...", false);
-
-            const playerData = {
-                id: myPlayerId,
-                name: myPlayerName,
-                score: 0,
-                joinedAt: new Date().toISOString()
-            };
-
-            if (window._fb?.authReadyPromise) {
-                await window._fb.authReadyPromise;
-            }
-
-            if (window.Peer) {
-                try {
-                    if (clientPeer) { try { clientPeer.destroy(); } catch(e){} clientPeer = null; }
-                    clientPeer = new Peer();
-                    clientPeer.on('open', () => {
-                        clientConn = clientPeer.connect(`matharena-${currentArenaId}`, { reliable: true });
-                        clientConn.on('open', () => {
-                            clientConn.send({ type: 'JOIN_ARENA', player: playerData });
-                        });
-                        clientConn.on('data', (data) => {
-                            if (data.type === 'ARENA_STATE_SYNC' && data.state) {
-                                onArenaDataUpdated(data.state);
-                            }
-                        });
-                    });
-                } catch(e) {
-                    console.warn("Peer Client 連線異常:", e);
-                }
-            }
-
-            if (broadcastChannel) {
-                broadcastChannel.postMessage({ type: 'REQUEST_ROOM_SYNC', arenaId: currentArenaId, player: playerData });
-            }
-
-            let attempts = 0;
-            const maxAttempts = 6;
-            const checkInterval = setInterval(async () => {
-                attempts++;
-                let arenaData = await fetchArenaData(currentArenaId);
-                if (arenaData || (arenaState && arenaState.id === currentArenaId)) {
-                    clearInterval(checkInterval);
-                    if (!arenaState && arenaData) arenaState = arenaData;
-
-                    if (!arenaState.players) arenaState.players = {};
-                    arenaState.players[myPlayerId] = playerData;
-                    await updateArenaPlayer(currentArenaId, myPlayerId, playerData);
-                    listenToArena(currentArenaId);
-
+// ... existing code ...
                     document.getElementById('student-waiting-name').innerText = myPlayerName;
                     document.getElementById('student-waiting-code').innerText = currentArenaId;
                     document.getElementById('student-waiting-target').innerText = arenaState.targetScore + ' 題獲勝';
+                    const spkElem = document.getElementById('student-waiting-speech-badge');
+                    if (spkElem) {
+                        spkElem.innerText = arenaState.enableSpeech !== false ? '已開啟 (可口述答題)' : '已停用 (請用鍵盤)';
+                        spkElem.className = arenaState.enableSpeech !== false ? 'font-bold text-emerald-600' : 'font-bold text-red-600';
+                    }
 
                     hideAllCompViews();
                     document.getElementById('comp-student-waiting-view').classList.remove('hidden');
                     showToast("已成功加入擂台！", true);
                     return;
-                }
-
-                if (attempts >= maxAttempts) {
-                    clearInterval(checkInterval);
-                    showToast("找不到該擂台或擂台已結束，請確認代碼是否正確！");
-                }
-            }, 300);
-        }
-        // ... existing code ...
+// ... existing code ...
         function onArenaDataUpdated(data) {
             const previousStatus = arenaState?.status;
             const previousRound = arenaState?.round || 1;
@@ -344,6 +321,9 @@
                     document.getElementById('student-play-name').innerText = myPlayerName;
                     document.getElementById('student-target-score').innerText = arenaState.targetScore;
                     
+                    // 根據老師設定決定是否啟動語音輸入介面
+                    setupCompSpeechUI(arenaState.enableSpeech !== false);
+
                     // 當為新一輪開始時，重置學生本地題目與分數
                     if (previousStatus === 'ended' || (arenaState.round && arenaState.round > previousRound)) {
                         myCurrentScore = (arenaState.players && arenaState.players[myPlayerId]) ? (arenaState.players[myPlayerId].score || 0) : 0;
@@ -367,61 +347,249 @@
             }
 
             if (arenaState.status === 'ended') {
+                stopCompSpeechRecognition();
                 renderPodiumAndResults(arenaState);
             }
         }
-        // ... existing code ...
-        function renderPodiumAndResults(arenaData) {
-            hideAllCompViews();
-            document.getElementById('comp-podium-view').classList.remove('hidden');
+// ... existing code ...
+        // 依老師設定調整學生端語音介面與狀態
+        function setupCompSpeechUI(isAllowed) {
+            const micText = document.getElementById('comp-mic-status-text');
+            const transcriptBar = document.getElementById('comp-transcript-container');
+            const cardBox = document.getElementById('comp-card-box');
 
-            // 老師端顯示原擂台續賽操作按鈕
-            const hostControls = document.getElementById('host-rematch-controls');
-            if (isTeacherHost) {
-                hostControls.classList.remove('hidden');
+            if (isAllowed) {
+                if (transcriptBar) transcriptBar.classList.remove('hidden');
+                if (micText) micText.innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答`;
+                if (cardBox) cardBox.title = "點擊嘗試開啟麥克風";
+                initCompSpeechRecognition();
             } else {
-                hostControls.classList.add('hidden');
+                stopCompSpeechRecognition();
+                if (transcriptBar) transcriptBar.classList.add('hidden');
+                if (micText) micText.innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 老師已關閉語音，請使用下方鍵盤作答`;
+                if (cardBox) cardBox.title = "本局已停用語音輸入";
             }
-
-            const players = Object.values(arenaData.players || {}).sort((a, b) => b.score - a.score);
-            const first = arenaData.winner || players[0] || { name: '無', score: 0 };
-            const second = players[1] || { name: '從缺', score: 0 };
-            const third = players[2] || { name: '從缺', score: 0 };
-
-            document.getElementById('podium-first-huge-name').innerText = first.name;
-            document.getElementById('podium-first-score-tag').innerText = `以 ${first.score} 分率先達標奪得擂台盟主！`;
-
-            document.getElementById('podium-p1-name').innerText = first.name;
-            document.getElementById('podium-p1-score').innerText = `${first.score} 分`;
-
-            document.getElementById('podium-p2-name').innerText = second.name;
-            document.getElementById('podium-p2-score').innerText = second.name === '從缺' ? '-' : `${second.score} 分`;
-
-            document.getElementById('podium-p3-name').innerText = third.name;
-            document.getElementById('podium-p3-score').innerText = third.name === '從缺' ? '-' : `${third.score} 分`;
-
-            const tbody = document.getElementById('podium-all-table-body');
-            tbody.innerHTML = '';
-            players.forEach((p, idx) => {
-                const tr = document.createElement('tr');
-                tr.className = "border-b hover:bg-gray-50";
-
-                let medal = `${idx + 1}`;
-                let titleHonor = '努力奮戰';
-                if (idx === 0) { medal = '🥇 1'; titleHonor = '🏆 擂台盟主'; }
-                else if (idx === 1) { medal = '🥈 2'; titleHonor = '亞軍神捕'; }
-                else if (idx === 2) { medal = '🥉 3'; titleHonor = '季軍高手'; }
-
-                tr.innerHTML = `
-                    <td class="p-2 text-center font-black ${idx === 0 ? 'text-amber-600 font-extrabold text-sm' : 'text-gray-600'}">${medal}</td>
-                    <td class="p-2 font-bold text-gray-800">${p.name}</td>
-                    <td class="p-2 text-center font-extrabold text-indigo-700">${p.score}</td>
-                    <td class="p-2 text-right font-black ${idx < 3 ? 'text-amber-600' : 'text-gray-400'}">${titleHonor}</td>
-                `;
-                tbody.appendChild(tr);
-            });
         }
 
+        // ================== 競賽模式語音辨識機制 ==================
+        function initCompSpeechRecognition() {
+            if (arenaState && arenaState.enableSpeech === false) return;
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                const micElem = document.getElementById('comp-mic-status-text');
+                if (micElem) micElem.innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 瀏覽器不支援語音，請用鍵盤作答`;
+                return;
+            }
+
+            if (compRecognition) {
+                try { compRecognition.abort(); } catch(e) {}
+            }
+
+            compRecognition = new SpeechRecognition();
+            compRecognition.lang = 'zh-TW';
+            compRecognition.continuous = false;
+            compRecognition.interimResults = true;
+
+            compRecognition.onresult = (event) => {
+                if (!isCompAnswering || (arenaState && arenaState.status !== 'playing')) return;
+                let interimTranscript = '';
+                let finalTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                const transcriptText = finalTranscript || interimTranscript;
+                compLastTranscript = transcriptText;
+                const trElem = document.getElementById('comp-transcript');
+                if (trElem) trElem.innerText = transcriptText;
+
+                if (finalTranscript) {
+                    processCompSpokenAnswer(finalTranscript);
+                }
+            };
+
+            compRecognition.onerror = (event) => {
+                const micElem = document.getElementById('comp-mic-status-text');
+                if (micElem && (event.error === 'not-allowed' || event.error === 'service-not-allowed')) {
+                    micElem.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-300"></i> 麥克風未授權，請使用鍵盤作答`;
+                }
+            };
+
+            compRecognition.onend = () => {
+                if (isCompAnswering && arenaState && arenaState.status === 'playing' && arenaState.enableSpeech !== false) {
+                    try { compRecognition.start(); } catch(e) {}
+                }
+            };
+
+            try {
+                compRecognition.start();
+            } catch(e) {}
+        }
+
+        async function manualStartCompSpeech() {
+            if (arenaState && arenaState.enableSpeech === false) {
+                showToast("老師已在本次比賽中停用語音輸入，請使用螢幕鍵盤作答！");
+                return;
+            }
+            if (!isCompAnswering || (arenaState && arenaState.status !== 'playing')) return;
+            const micStatus = document.getElementById('comp-mic-status-text');
+            if (micStatus) micStatus.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-yellow-200"></i> 正在連線麥克風...`;
+
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+                initCompSpeechRecognition();
+                if (micStatus) micStatus.innerHTML = `<i class="fa-solid fa-microphone text-green-300"></i> 聆聽中... (請口述或用大鍵盤)`;
+            } catch (err) {
+                if (micStatus) micStatus.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-300"></i> 麥克風受阻，請使用鍵盤作答`;
+            }
+        }
+
+        function stopCompSpeechRecognition() {
+            if (compRecognition) {
+                try { compRecognition.abort(); } catch(e) {}
+                compRecognition = null;
+            }
+        }
+
+        function processCompSpokenAnswer(text) {
+            if (!isCompAnswering || (arenaState && arenaState.status !== 'playing')) return;
+            if (arenaState && arenaState.enableSpeech === false) return;
+
+            // 智慧同音字修正：八、九、四
+            text = text.replace(/把|爸|吧|爬/g, '八')
+                       .replace(/求|走|酒|久/g, '九')
+                       .replace(/是|事|市|室/g, '四');
+
+            const trElem = document.getElementById('comp-transcript');
+            if (trElem) trElem.innerText = text;
+
+            const numbers = text.match(/\d+/g);
+            let parsedNum = null;
+
+            if (numbers && numbers.length > 0) {
+                parsedNum = parseInt(numbers.join(''), 10);
+            } else {
+                parsedNum = parseChineseNumberToInt(text);
+            }
+
+            if (parsedNum !== null && !isNaN(parsedNum)) {
+                submitCompAnswer(parsedNum);
+            }
+        }
+
+        function pressCompKey(key) {
+            const input = document.getElementById('comp-manual-input');
+            if (key === 'clear') {
+                input.value = '';
+                compLastTranscript = '';
+                const trElem = document.getElementById('comp-transcript');
+                if (trElem) trElem.innerText = '（已清除）';
+            } else if (key === 'back') {
+                input.value = input.value.slice(0, -1);
+            } else {
+                input.value += key;
+            }
+        }
+
+        function nextCompQuestion() {
+            if (arenaState?.status !== 'playing') {
+                stopCompSpeechRecognition();
+                return;
+            }
+
+            if (!compQuestionPool || compQuestionPool.length === 0) {
+                compQuestionPool = buildQuestionsByMode(arenaState.topic, arenaState.mode);
+            }
+
+            const randIdx = Math.floor(Math.random() * compQuestionPool.length);
+            compCurrentQ = compQuestionPool[randIdx];
+
+            const qStr = compCurrentQ.display ? compCurrentQ.display : `${compCurrentQ.a} ${compCurrentQ.op} ${compCurrentQ.b} = ?`;
+            document.getElementById('comp-card-question').innerText = qStr;
+            document.getElementById('comp-manual-input').value = '';
+            
+            const trElem = document.getElementById('comp-transcript');
+            if (trElem) trElem.innerText = '（聆聽中...）';
+            compLastTranscript = '';
+
+            isCompAnswering = true;
+
+            if (arenaState.enableSpeech !== false) {
+                if (!compRecognition) {
+                    initCompSpeechRecognition();
+                } else {
+                    try { compRecognition.start(); } catch(e) {}
+                }
+            }
+        }
+
+        function submitCompManualAnswer() {
+            const val = parseInt(document.getElementById('comp-manual-input').value, 10);
+            if (!isNaN(val)) {
+                submitCompAnswer(val);
+            }
+        }
+
+        async function submitCompAnswer(ansVal) {
+            if (!isCompAnswering || !compCurrentQ || arenaState?.status !== 'playing') return;
+            isCompAnswering = false;
+
+            const isCorrect = (Number(ansVal) === Number(compCurrentQ.ans));
+            const feedbackText = document.getElementById('comp-feedback-text');
+
+            if (isCorrect) {
+                myCurrentScore += 1;
+                feedbackText.innerHTML = `<span class="text-green-600 font-extrabold text-sm animate-pulse">⭕ 答對！+1 分！</span>`;
+            } else {
+                myCurrentScore = Math.max(0, myCurrentScore - 1);
+                feedbackText.innerHTML = `<span class="text-red-500 font-extrabold text-sm animate-pulse">❌ 答錯！扣 1 分（正確答案：${compCurrentQ.ans}）</span>`;
+            }
+
+            document.getElementById('student-my-score').innerText = myCurrentScore;
+            const target = arenaState.targetScore || 5;
+            const pct = Math.min(100, Math.round((myCurrentScore / target) * 100));
+            document.getElementById('student-progress-bar').style.width = `${pct}%`;
+
+            const updateData = {
+                id: myPlayerId,
+                name: myPlayerName,
+                score: myCurrentScore,
+                updatedAt: new Date().toISOString()
+            };
+
+            if (clientConn && clientConn.open) {
+                clientConn.send({ type: 'PLAYER_SCORE_UPDATE', player: updateData });
+            }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'PLAYER_SCORE_UPDATE', arenaId: currentArenaId, player: updateData });
+            }
+            await updateArenaPlayer(currentArenaId, myPlayerId, updateData);
+
+            if (myCurrentScore >= target) {
+                const winPayload = {
+                    arenaId: currentArenaId,
+                    winner: updateData
+                };
+                if (clientConn && clientConn.open) {
+                    clientConn.send({ type: 'MATCH_WON', ...winPayload });
+                }
+                if (broadcastChannel) {
+                    broadcastChannel.postMessage({ type: 'MATCH_WON', ...winPayload });
+                }
+                stopCompSpeechRecognition();
+                return;
+            }
+
+            setTimeout(nextCompQuestion, 400);
+        }
+// ... existing code ...
         // ================== 原擂台續賽邏輯 (老師控制) ==================
         function openRematchModal() {
             if (!arenaState) return;
@@ -430,6 +598,7 @@
             updateRematchModeOptions();
             document.getElementById('rematch-mode-select').value = arenaState.mode || 'mul-9x9-standard';
             document.getElementById('rematch-target-select').value = arenaState.targetScore || '5';
+            document.getElementById('rematch-enable-speech').checked = arenaState.enableSpeech !== false;
             
             const modal = document.getElementById('rematch-modal');
             modal.classList.remove('hidden');
@@ -461,6 +630,7 @@
             const newMode = document.getElementById('rematch-mode-select').value;
             const newModeName = document.getElementById('rematch-mode-select').selectedOptions[0]?.text.split('(')[0].trim() || '新單元';
             const newTarget = parseInt(document.getElementById('rematch-target-select').value, 10) || 5;
+            const enableSpeech = document.getElementById('rematch-enable-speech').checked;
 
             // 重置所有參賽選手成績為 0
             if (arenaState.players) {
@@ -473,6 +643,7 @@
             arenaState.mode = newMode;
             arenaState.modeName = newModeName;
             arenaState.targetScore = newTarget;
+            arenaState.enableSpeech = enableSpeech;
             arenaState.status = 'playing';
             arenaState.winner = null;
             arenaState.round = (arenaState.round || 1) + 1;
@@ -482,6 +653,6 @@
             closeRematchModal();
             broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
             onArenaDataUpdated(arenaState);
-            showToast(`第 ${arenaState.round} 局開戰！全員分數已歸零！`, true);
+            showToast(`第 ${arenaState.round} 局開戰！全員分數已歸零！(語音：${enableSpeech ? '已開啟' : '已停用'})`, true);
         }
-        // ... existing code ...
+// ... existing code ...
