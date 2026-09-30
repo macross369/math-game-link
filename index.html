@@ -375,7 +375,7 @@
                     </div>
 
                     <!-- 題目容器 (三欄整齊對齊) -->
-                    <div id="ws-questions-container" class="space-y-2 text-sm md:text-base font-semibold"></div>
+                    <div id="ws-questions-container" class="space-y-2 text-xs sm:text-sm md:text-base font-semibold"></div>
 
                     <div class="border-t border-gray-300 mt-6 pt-3 text-[11px] text-gray-400 flex justify-between items-center">
                         <span>數學計算能力挑戰王 · 學習成長評量單</span>
@@ -1894,12 +1894,12 @@
             const colsPerRow = 3;
             for (let i = 0; i < list.length; i += colsPerRow) {
                 const rowElem = document.createElement('div');
-                rowElem.className = "worksheet-row grid grid-cols-3 gap-x-6 gap-y-1 pb-1.5 border-b border-gray-100";
+                rowElem.className = "worksheet-row grid grid-cols-3 gap-x-2 sm:gap-x-4 md:gap-x-6 gap-y-1 pb-1.5 border-b border-gray-100 items-baseline";
 
                 for (let j = 0; j < colsPerRow; j++) {
                     const idx = i + j;
                     const colElem = document.createElement('div');
-                    colElem.className = "flex items-baseline justify-start gap-1 py-0.5";
+                    colElem.className = "flex items-baseline justify-start gap-0.5 md:gap-1 py-0.5 whitespace-nowrap overflow-hidden";
 
                     if (idx < list.length) {
                         const q = list[idx];
@@ -1908,29 +1908,29 @@
                         if (wsType === 'test') {
                             if (q.display) {
                                 colElem.innerHTML = `
-                                    <span class="text-gray-400 font-normal w-7 shrink-0 text-xs">${idx + 1}.</span>
-                                    <span class="text-gray-900 tracking-wider font-bold">${qText}</span>
-                                    <span class="text-gray-400 font-semibold pl-1">，?=( &nbsp; )</span>
+                                    <span class="text-gray-400 font-normal w-5 md:w-6 shrink-0 text-xs">${idx + 1}.</span>
+                                    <span class="text-gray-900 tracking-normal font-bold whitespace-nowrap">${qText}</span>
+                                    <span class="text-gray-400 font-semibold pl-0.5 whitespace-nowrap">，?=( &nbsp; )</span>
                                 `;
                             } else {
                                 colElem.innerHTML = `
-                                    <span class="text-gray-400 font-normal w-7 shrink-0 text-xs">${idx + 1}.</span>
-                                    <span class="text-gray-900 tracking-wider font-bold">${qText}&nbsp;=&nbsp;</span>
-                                    <span class="text-gray-400 font-semibold tracking-wider">(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</span>
+                                    <span class="text-gray-400 font-normal w-5 md:w-6 shrink-0 text-xs">${idx + 1}.</span>
+                                    <span class="text-gray-900 tracking-normal font-bold whitespace-nowrap">${qText}&nbsp;=&nbsp;</span>
+                                    <span class="text-gray-400 font-semibold tracking-wider whitespace-nowrap">(&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</span>
                                 `;
                             }
                         } else {
                             if (q.display) {
                                 colElem.innerHTML = `
-                                    <span class="text-gray-400 font-normal w-7 shrink-0 text-xs">${idx + 1}.</span>
-                                    <span class="text-gray-900 tracking-wider font-bold">${qText}</span>
-                                    <span class="text-emerald-700 font-black pl-1">➔ ? = ${q.ans}</span>
+                                    <span class="text-gray-400 font-normal w-5 md:w-6 shrink-0 text-xs">${idx + 1}.</span>
+                                    <span class="text-gray-900 tracking-normal font-bold whitespace-nowrap">${qText}</span>
+                                    <span class="text-emerald-700 font-black pl-0.5 whitespace-nowrap">➔ ? = ${q.ans}</span>
                                 `;
                             } else {
                                 colElem.innerHTML = `
-                                    <span class="text-gray-400 font-normal w-7 shrink-0 text-xs">${idx + 1}.</span>
-                                    <span class="text-gray-900 tracking-wider font-bold">${qText}&nbsp;=&nbsp;</span>
-                                    <span class="text-emerald-700 font-black text-base pl-0.5">${q.ans}</span>
+                                    <span class="text-gray-400 font-normal w-5 md:w-6 shrink-0 text-xs">${idx + 1}.</span>
+                                    <span class="text-gray-900 tracking-normal font-bold whitespace-nowrap">${qText}&nbsp;=&nbsp;</span>
+                                    <span class="text-emerald-700 font-black text-sm md:text-base pl-0.5 whitespace-nowrap">${q.ans}</span>
                                 `;
                             }
                         }
