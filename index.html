@@ -13,6 +13,22 @@
     <!-- 引入 PeerJS 支援跨裝置 WebRTC 點對點連線 -->
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
+    <!-- 引入 Firebase SDK (模組化引入支援多載具即時同步) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 掛載至 window 供全域邏輯呼叫
+        window.fbModules = {
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
+            getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs
+        };
+        if (window.initFirebaseSync) {
+            window.initFirebaseSync();
+        }
+    </script>
+
     <style>
         /* 避免在列印或 PDF 輸出時表格列或題目卡被強行拆開 */
         @media print {
@@ -847,7 +863,18 @@
             <!-- 子功能 A：學生名單管理 -->
             <div id="teacher-roster-subview" class="space-y-4">
                 <div class="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-3">
-                    <span class="text-xs font-bold text-gray-700 block">新增授權學生（姓名與 Google 帳號）：</span>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-xs font-bold text-gray-700 block">新增授權學生（姓名與 Google 帳號）：</span>
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <button onclick="exportRosterCSV()" class="px-2.5 py-1 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold shadow-sm transition flex items-center gap-1">
+                                <i class="fa-solid fa-file-export"></i> 匯出名冊 (CSV)
+                            </button>
+                            <button onclick="triggerImportCSV()" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm transition flex items-center gap-1">
+                                <i class="fa-solid fa-file-import"></i> 批次匯入 (CSV)
+                            </button>
+                            <input type="file" id="roster-file-input" accept=".csv,.json" class="hidden" onchange="handleRosterFileImport(event)">
+                        </div>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <input type="text" id="roster-name-input" placeholder="學生真實姓名 (如: 陳小明)" class="p-2.5 bg-white border border-gray-300 rounded-xl font-bold">
                         <input type="email" id="roster-email-input" placeholder="Google 信箱 (如: ming@gmail.com)" class="p-2.5 bg-white border border-gray-300 rounded-xl font-bold">
@@ -859,7 +886,15 @@
 
                 <div class="space-y-2">
                     <div class="flex justify-between items-center text-xs font-bold text-gray-700 px-1">
-                        <span>已建檔學生名冊 (<span id="roster-count">0</span> 位)</span>
+                        <span class="flex items-center gap-1.5">
+                            已建檔學生名冊 (<span id="roster-count">0</span> 位)
+                            <span id="roster-sync-badge" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-semibold flex items-center gap-1">
+                                <i class="fa-solid fa-cloud"></i> 載具同步中
+                            </span>
+                        </span>
+                        <button onclick="downloadRosterTemplate()" class="text-indigo-600 text-[11px] hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-download"></i> 下載匯入格式範本
+                        </button>
                     </div>
                     <div class="max-h-56 overflow-y-auto border rounded-2xl bg-white shadow-sm">
                         <table class="w-full text-left text-xs">
@@ -995,17 +1030,151 @@
 
         // 本地名冊與成績快取 (支援獨立離線運作)
         let rosterList = [
-            { name: '示範生-林小華', email: 'student1@example.com' },
-            { name: '示範生-陳大明', email: 'student2@example.com' }
+            { id: 'st_demo_1', name: '示範生-林小華', email: 'student1@example.com' },
+            { id: 'st_demo_2', name: '示範生-陳大明', email: 'student2@example.com' }
         ];
         let scoreHistory = [];
+
+        // Firebase 與跨裝置即時同步狀態
+        let fbApp = null, fbAuth = null, fbDb = null;
+        let isFbReady = false;
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'math-challenge-champion';
 
         window.onload = function() {
             updateModeOptions();
             initWorksheetSection();
             initArenaBroadcastListener();
             checkUrlArenaParams();
+            if (window.fbModules) {
+                initFirebaseSync();
+            }
         };
+
+        // ================== 多載具即時同步系統 (Firebase + BroadcastChannel) ==================
+        async function initFirebaseSync() {
+            if (!window.fbModules) return;
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, onSnapshot } = window.fbModules;
+
+            try {
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    const cfg = JSON.parse(__firebase_config);
+                    fbApp = initializeApp(cfg);
+                    fbAuth = getAuth(fbApp);
+                    fbDb = getFirestore(fbApp);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(fbAuth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(fbAuth);
+                    }
+                    isFbReady = true;
+                    bindFirestoreRealtimeListeners();
+                } else {
+                    console.info("未檢測到 Firebase 配置，切換為本地廣播與 WebRTC 即時同步通道");
+                    bindBroadcastRealtimeListeners();
+                }
+            } catch (err) {
+                console.warn("Firebase 初始化降級:", err);
+                bindBroadcastRealtimeListeners();
+            }
+        }
+        window.initFirebaseSync = initFirebaseSync;
+
+        function bindFirestoreRealtimeListeners() {
+            if (!isFbReady || !fbDb || !window.fbModules) return;
+            const { collection, onSnapshot } = window.fbModules;
+
+            // 1. 監聽學生名冊集合 (/artifacts/{appId}/public/data/roster)
+            const rosterCol = collection(fbDb, 'artifacts', APP_ID, 'public', 'data', 'roster');
+            onSnapshot(rosterCol, (snap) => {
+                const list = [];
+                snap.forEach(d => {
+                    list.push({ id: d.id, ...d.data() });
+                });
+                if (list.length > 0) {
+                    rosterList = list;
+                    renderRosterTable();
+                    renderScoreFilterOptions();
+                }
+            }, (err) => {
+                console.warn("名冊監聽錯誤:", err);
+            });
+
+            // 2. 監聽測驗成績集合 (/artifacts/{appId}/public/data/scores)
+            const scoresCol = collection(fbDb, 'artifacts', APP_ID, 'public', 'data', 'scores');
+            onSnapshot(scoresCol, (snap) => {
+                const list = [];
+                snap.forEach(d => {
+                    list.push({ id: d.id, ...d.data() });
+                });
+                list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+                scoreHistory = list;
+                renderScoresTable();
+            }, (err) => {
+                console.warn("成績監聽錯誤:", err);
+            });
+        }
+
+        function bindBroadcastRealtimeListeners() {
+            if (!broadcastChannel) return;
+            // 透過 BroadcastChannel 支援多分頁與本地多載具同步
+            const originalOnMessage = broadcastChannel.onmessage;
+            broadcastChannel.onmessage = (event) => {
+                if (originalOnMessage) originalOnMessage(event);
+                const msg = event.data;
+                if (!msg) return;
+
+                if (msg.type === 'SYNC_ROSTER_UPDATE' && Array.isArray(msg.roster)) {
+                    rosterList = msg.roster;
+                    renderRosterTable();
+                    renderScoreFilterOptions();
+                } else if (msg.type === 'SYNC_SCORE_RECORD' && msg.record) {
+                    scoreHistory.unshift(msg.record);
+                    renderScoresTable();
+                }
+            };
+        }
+
+        async function syncRosterChange() {
+            renderRosterTable();
+            renderScoreFilterOptions();
+
+            // 若 Firebase 就緒，同步至 Firestore
+            if (isFbReady && fbDb && window.fbModules) {
+                const { collection, doc, setDoc } = window.fbModules;
+                try {
+                    for (const st of rosterList) {
+                        const sId = st.id || ('st_' + (st.email ? st.email.replace(/[@.]/g, '_') : Math.random().toString(36).substr(2, 9)));
+                        const dRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'roster', sId);
+                        await setDoc(dRef, { name: st.name, email: st.email }, { merge: true });
+                    }
+                } catch(e) { console.warn("Firestore 名冊同步儲存失敗:", e); }
+            }
+
+            // 同步至 BroadcastChannel
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'SYNC_ROSTER_UPDATE', roster: rosterList });
+            }
+        }
+
+        async function syncScoreChange(record) {
+            scoreHistory.unshift(record);
+            renderScoresTable();
+
+            // 若 Firebase 就緒，儲存至 Firestore
+            if (isFbReady && fbDb && window.fbModules) {
+                const { doc, setDoc } = window.fbModules;
+                try {
+                    const sRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'scores', record.id);
+                    await setDoc(sRef, record);
+                } catch(e) { console.warn("Firestore 成績同步失敗:", e); }
+            }
+
+            // 同步至 BroadcastChannel
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'SYNC_SCORE_RECORD', record });
+            }
+        }
 
         function showToast(msg, isSuccess = true) {
             const toast = document.getElementById('toast');
@@ -1684,7 +1853,7 @@
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const mode = document.querySelector('input[name="mode"]:checked').value;
             const record = {
-                id: 'rec_' + Date.now(),
+                id: 'rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
                 timestamp: new Date().toLocaleString(),
                 studentName: currentStudent.name,
                 studentEmail: currentStudent.email || '未登入訪客',
@@ -1695,7 +1864,7 @@
                 totalCount: questions.length,
                 rate: questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0
             };
-            scoreHistory.unshift(record);
+            syncScoreChange(record);
         }
 
         function renderWrongTable() {
@@ -2862,17 +3031,140 @@
                 return;
             }
 
-            rosterList.push({ name, email });
+            const id = 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            rosterList.push({ id, name, email });
             document.getElementById('roster-name-input').value = '';
             document.getElementById('roster-email-input').value = '';
-            renderRosterTable();
-            showToast("學生建檔成功！", true);
+            syncRosterChange();
+            showToast("學生建檔成功並已同步！", true);
         }
 
-        function removeStudentFromRoster(idx) {
+        async function removeStudentFromRoster(idx) {
+            const target = rosterList[idx];
+            if (!target) return;
+
+            if (isFbReady && fbDb && target.id && window.fbModules) {
+                const { doc, deleteDoc } = window.fbModules;
+                try {
+                    await deleteDoc(doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'roster', target.id));
+                } catch(e) {}
+            }
+
             rosterList.splice(idx, 1);
-            renderRosterTable();
-            showToast("已從名冊移除該學生", true);
+            syncRosterChange();
+            showToast("已從名冊移除該學生並同步", true);
+        }
+
+        // ================== 名冊匯入與匯出模組 (CSV / JSON) ==================
+        function exportRosterCSV() {
+            if (rosterList.length === 0) {
+                showToast("名冊目前為空，無法匯出！", false);
+                return;
+            }
+
+            let csvContent = "\uFEFF序號,學生姓名,Google信箱\n";
+            rosterList.forEach((st, idx) => {
+                const safeName = `"${(st.name || '').replace(/"/g, '""')}"`;
+                const safeEmail = `"${(st.email || '').replace(/"/g, '""')}"`;
+                csvContent += `${idx + 1},${safeName},${safeEmail}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `數學挑戰王_學生名冊_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showToast("學生名冊 CSV 匯出完成！", true);
+        }
+
+        function downloadRosterTemplate() {
+            const csvContent = "\uFEFF序號,學生姓名,Google信箱\n1,林小華,student1@gmail.com\n2,陳大明,student2@gmail.com\n3,王小美,student3@gmail.com\n";
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `名冊匯入範本.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            showToast("已下載名冊格式範本", true);
+        }
+
+        function triggerImportCSV() {
+            const input = document.getElementById('roster-file-input');
+            if (input) {
+                input.value = '';
+                input.click();
+            }
+        }
+
+        function handleRosterFileImport(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    let count = 0;
+
+                    if (file.name.endsWith('.json')) {
+                        const parsed = JSON.parse(content);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach(item => {
+                                if (item.name && item.email) {
+                                    rosterList.push({
+                                        id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                        name: String(item.name).trim(),
+                                        email: String(item.email).trim()
+                                    });
+                                    count++;
+                                }
+                            });
+                        }
+                    } else {
+                        // 處理 CSV 格式
+                        const lines = content.split(/\r\n|\n/);
+                        lines.forEach((line, index) => {
+                            if (!line.trim() || index === 0) return; // 跳過空行與標題欄
+                            const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
+                            // 支援兩欄 [姓名, 信箱] 或三欄 [序號, 姓名, 信箱]
+                            let name = '', email = '';
+                            if (parts.length >= 3) {
+                                name = parts[1];
+                                email = parts[2];
+                            } else if (parts.length === 2) {
+                                name = parts[0];
+                                email = parts[1];
+                            }
+                            if (name && email && email.includes('@')) {
+                                rosterList.push({
+                                    id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                    name,
+                                    email
+                                });
+                                count++;
+                            }
+                        });
+                    }
+
+                    if (count > 0) {
+                        syncRosterChange();
+                        showToast(`成功匯入 ${count} 位學生，並已即時同步！`, true);
+                    } else {
+                        showToast("未能解析到有效學生資料，請確認檔案格式！", false);
+                    }
+                } catch(err) {
+                    showToast("檔案讀取或解析失敗！", false);
+                    console.error("名冊匯入失敗:", err);
+                }
+            };
+            reader.readAsText(file);
         }
 
         function renderScoreFilterOptions() {
