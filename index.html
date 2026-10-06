@@ -173,6 +173,21 @@
                             <option value="10">10 秒 (進階專用)</option>
                         </select>
                     </div>
+
+                    <!-- 語音辨識功能開關 -->
+                    <div class="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-xl">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-microphone text-indigo-600 text-sm"></i>
+                            <div>
+                                <div class="text-xs md:text-sm font-bold text-gray-800">開啟語音辨識作答</div>
+                                <div class="text-[11px] text-gray-400">關閉後僅能使用螢幕大鍵盤或手動輸入作答</div>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="personal-enable-speech" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
                 </div>
 
                 <button onclick="startGame()" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base rounded-2xl shadow-lg transition transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
@@ -1003,6 +1018,7 @@
         let isAnswering = false;
         let isPaused = false;
         let lastTranscript = '';
+        let personalEnableSpeech = true; // 個人挑戰語音辨識開關狀態
 
         // 題庫模式專用狀態
         let currentWorksheetTopic = 'multiply';
@@ -1499,6 +1515,7 @@
             timeLimit = parseInt(document.getElementById('time-limit').value);
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const mode = document.querySelector('input[name="mode"]:checked').value;
+            personalEnableSpeech = document.getElementById('personal-enable-speech').checked;
             
             questions = buildQuestionsByMode(topic, mode).sort(() => Math.random() - 0.5);
             currentIndex = 0;
@@ -1512,7 +1529,11 @@
             document.getElementById('result-screen').classList.add('hidden');
             document.getElementById('game-screen').classList.remove('hidden');
 
-            initSpeechRecognition();
+            if (personalEnableSpeech) {
+                initSpeechRecognition();
+            } else {
+                stopRecognition();
+            }
             nextQuestion();
         }
 
@@ -1561,6 +1582,10 @@
         }
 
         async function manualStartSpeech() {
+            if (!personalEnableSpeech) {
+                showToast("語音辨識功能未開啟，請使用下方鍵盤作答！", false);
+                return;
+            }
             if (!isAnswering || isPaused) return;
             const micStatus = document.getElementById('mic-status-text');
             micStatus.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-yellow-200"></i> 連線麥克風...`;
@@ -1599,13 +1624,22 @@
             const currentQ = questions[currentIndex];
             const displayText = currentQ.display ? currentQ.display : `${currentQ.a} ${currentQ.op} ${currentQ.b} = ?`;
             document.getElementById('card-question').innerText = displayText;
-            document.getElementById('transcript').innerText = '（聆聽中...）';
             document.getElementById('manual-input').value = '';
-            document.getElementById('mic-status-text').innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答`;
             lastTranscript = '';
 
+            const micText = document.getElementById('mic-status-text');
+            const transcriptBar = document.getElementById('transcript');
+
+            if (personalEnableSpeech) {
+                transcriptBar.innerText = '（聆聽中...）';
+                micText.innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答`;
+            } else {
+                transcriptBar.innerText = '（語音辨識已關閉）';
+                micText.innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 語音已關閉，請使用下方鍵盤作答`;
+            }
+
             isAnswering = true;
-            if (recognition && !isPaused) {
+            if (recognition && !isPaused && personalEnableSpeech) {
                 try { recognition.start(); } catch (e) {}
             }
 
@@ -1662,11 +1696,16 @@
             } else {
                 const currentQ = questions[currentIndex];
                 card.innerText = currentQ.display ? currentQ.display : `${currentQ.a} ${currentQ.op} ${currentQ.b} = ?`;
-                micStatus.innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答`;
                 
-                isAnswering = true;
-                if (recognition) {
-                    try { recognition.start(); } catch(e) {}
+                if (personalEnableSpeech) {
+                    micStatus.innerHTML = `<i class="fa-solid fa-microphone text-red-300"></i> 請說出答案或用下方鍵盤作答`;
+                    isAnswering = true;
+                    if (recognition) {
+                        try { recognition.start(); } catch(e) {}
+                    }
+                } else {
+                    micStatus.innerHTML = `<i class="fa-solid fa-keyboard text-amber-200"></i> 語音已關閉，請使用下方鍵盤作答`;
+                    isAnswering = true;
                 }
 
                 timer = setInterval(() => {
