@@ -17,12 +17,12 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // 掛載至 window 供全域邏輯呼叫
         window.fbModules = {
             initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
-            getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs
+            getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc
         };
         if (window.initFirebaseSync) {
             window.initFirebaseSync();
@@ -1043,6 +1043,21 @@
         let arenaState = null;
         let myCompRound = 1; // 記錄學生本地當前回合編號
         let compNextQTimer = null; // 計時器控制，防舊題連鎖觸發
+        let arenaUnsubDoc = null; // Firestore 房間即時監聽清理器
+        let arenaUnsubPlayers = null; // Firestore 選手即時監聽清理器
+
+        // WebRTC 跨網域公共 STUN 伺服器配置清單 (加強 NAT 穿透能力)
+        const peerIceConfig = {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
+                ]
+            }
+        };
 
         // 本地名冊與成績快取 (支援獨立離線運作)
         let rosterList = [
@@ -1309,10 +1324,24 @@
                             <div class="grid grid-cols-1 gap-2">
                                 <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
                                     <input type="radio" name="mode" value="mul-9x9-standard" checked class="${currentTheme.radio} h-4 w-4">
-                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共81題)</span>
+                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共72題)</span>
                                 </label>
                                 <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
                                     <input type="radio" name="mode" value="mul-9x9-same" class="${currentTheme.radio} h-4 w-4">
+                                    <span class="ml-2 text-sm font-bold text-gray-800">精簡模式 (2×1與1×2相同，共36題)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
+                            <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：十十乘法</div>
+                            <div class="grid grid-cols-1 gap-2">
+                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
+                                    <input type="radio" name="mode" value="mul-10x10-standard" class="${currentTheme.radio} h-4 w-4">
+                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共90題)</span>
+                                </label>
+                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
+                                    <input type="radio" name="mode" value="mul-10x10-same" class="${currentTheme.radio} h-4 w-4">
                                     <span class="ml-2 text-sm font-bold text-gray-800">精簡模式 (2×1與1×2相同，共45題)</span>
                                 </label>
                             </div>
@@ -1432,19 +1461,19 @@
             let list = [];
             if (topic === 'multiply') {
                 if (mode === 'mul-9x9-standard') {
-                    for (let i = 1; i <= 9; i++) {
+                    for (let i = 2; i <= 9; i++) {
                         for (let j = 1; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                     }
                 } else if (mode === 'mul-9x9-same') {
-                    for (let i = 1; i <= 9; i++) {
+                    for (let i = 2; i <= 9; i++) {
                         for (let j = i; j <= 9; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                     }
                 } else if (mode === 'mul-10x10-standard') {
-                    for (let i = 1; i <= 10; i++) {
+                    for (let i = 2; i <= 10; i++) {
                         for (let j = 1; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                     }
                 } else if (mode === 'mul-10x10-same') {
-                    for (let i = 1; i <= 10; i++) {
+                    for (let i = 2; i <= 10; i++) {
                         for (let j = i; j <= 10; j++) list.push({ a: i, b: j, op: '×', ans: i * j });
                     }
                 } else if (mode === 'mul-25') {
@@ -1984,10 +2013,10 @@
                 btnClass: 'bg-rose-100 text-rose-800 border-rose-400 shadow-sm ring-2 ring-rose-200',
                 inactiveBtn: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100',
                 modes: [
-                    { id: 'mul-9x9-standard', name: '九九乘法 - 標準模式 (共81題)' },
-                    { id: 'mul-9x9-same', name: '九九乘法 - 精簡模式 (共45題)' },
-                    { id: 'mul-10x10-standard', name: '十十乘法 - 標準模式 (共100題)' },
-                    { id: 'mul-10x10-same', name: '十十乘法 - 精簡模式 (共55題)' },
+                    { id: 'mul-9x9-standard', name: '九九乘法 - 標準模式 (共72題)' },
+                    { id: 'mul-9x9-same', name: '九九乘法 - 精簡模式 (共36題)' },
+                    { id: 'mul-10x10-standard', name: '十十乘法 - 標準模式 (共90題)' },
+                    { id: 'mul-10x10-same', name: '十十乘法 - 精簡模式 (共45題)' },
                     { id: 'mul-25', name: '特殊計算：25的倍數 (共8題)' },
                     { id: 'mul-125', name: '特殊計算：125的倍數 (共8題)' },
                     { id: 'mul-11_20x2_10', name: '11~20 × 2~10 (共90題)' }
@@ -2230,7 +2259,7 @@
             }
         }
 
-        function createArenaSubmit() {
+        async function createArenaSubmit() {
             const arenaName = document.getElementById('arena-name-input').value.trim() || '數學計算爭霸擂台';
             const topic = document.getElementById('arena-topic-select').value;
             const mode = document.getElementById('arena-mode-select').value;
@@ -2268,7 +2297,44 @@
 
             compQuestionPool = buildQuestionsByMode(topic, mode);
 
+            // 啟動 WebRTC 帶有公共 STUN 穿透的節點
             initHostPeer(code);
+
+            // 若 Firebase 就緒，同步發布擂台至 Firestore，實現 100% 跨網域免 NAT 穿透互聯
+            if (isFbReady && fbDb && window.fbModules) {
+                try {
+                    const { doc, setDoc, collection, onSnapshot } = window.fbModules;
+                    const arenaDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code);
+                    await setDoc(arenaDocRef, arenaState);
+
+                    // 老師端即時監聽選手子集合
+                    const playersCol = collection(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players');
+                    if (arenaUnsubPlayers) arenaUnsubPlayers();
+                    arenaUnsubPlayers = onSnapshot(playersCol, (snapshot) => {
+                        snapshot.docChanges().forEach((change) => {
+                            const pData = change.doc.data();
+                            if (pData) {
+                                if (!arenaState.players) arenaState.players = {};
+                                arenaState.players[pData.id] = pData;
+
+                                // 若有學生達標且比賽進行中，判定獲勝
+                                if (arenaState.status === 'playing' && pData.score >= arenaState.targetScore) {
+                                    handleHostReceivedData({
+                                        type: 'MATCH_WON',
+                                        round: arenaState.round,
+                                        winner: pData
+                                    }, null);
+                                }
+                            }
+                        });
+                        onArenaDataUpdated(arenaState);
+                    }, (err) => {
+                        console.warn("Firestore 選手監聽提示:", err);
+                    });
+                } catch (e) {
+                    console.warn("Firestore 擂台建立同步提示:", e);
+                }
+            }
 
             document.getElementById('lobby-arena-title').innerText = arenaName;
             document.getElementById('lobby-arena-unit').innerText = `${worksheetMeta[topic].title} · ${modeName}`;
@@ -2296,7 +2362,8 @@
             }
 
             const peerId = `matharena-v2-${code}`;
-            hostPeer = new Peer(peerId);
+            // 傳入 Google STUN 伺服器配置以加強跨網域 P2P 連線成功率
+            hostPeer = new Peer(peerId, peerIceConfig);
 
             hostPeer.on('connection', (conn) => {
                 conn.on('open', () => {
@@ -2311,6 +2378,10 @@
                 conn.on('close', () => {
                     delete connectedClients[conn.peer];
                 });
+            });
+
+            hostPeer.on('error', (err) => {
+                console.info("PeerJS 主機提示 (將以雲端資料庫保持跨網域通訊):", err.type || err);
             });
         }
 
@@ -2349,17 +2420,31 @@
         }
 
         function broadcastToAllStudents(message) {
+            // 1. WebRTC 直連廣播
             Object.values(connectedClients).forEach(conn => {
                 if (conn && conn.open) {
                     try { conn.send(message); } catch(e) {}
                 }
             });
+
+            // 2. 本機 BroadcastChannel 廣播
             if (broadcastChannel) {
                 broadcastChannel.postMessage(message);
             }
+
+            // 3. Firestore 雲端即時同步 (保證跨網域、跨設備 100% 接收)
+            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+                try {
+                    const { doc, setDoc } = window.fbModules;
+                    const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
+                    setDoc(aRef, message.state || arenaState, { merge: true });
+                } catch (e) {
+                    console.warn("廣播 Firestore 狀態失敗:", e);
+                }
+            }
         }
 
-        function joinArenaSubmit() {
+        async function joinArenaSubmit() {
             const code = document.getElementById('join-arena-code').value.trim();
             const name = document.getElementById('join-player-name').value.trim();
 
@@ -2377,7 +2462,49 @@
             myCurrentScore = 0;
             isTeacherHost = false;
 
-            showToast("正在連線進入擂台...", true);
+            showToast("正在跨網域連線擂台...", true);
+
+            // 雙軌策略一：立即透過 Firestore 進行跨網域直連 (抗防火牆與不同網域)
+            let joinedViaFirestore = false;
+            if (isFbReady && fbDb && window.fbModules) {
+                try {
+                    const { doc, getDoc, setDoc, onSnapshot } = window.fbModules;
+                    const arenaDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code);
+                    const snap = await getDoc(arenaDocRef);
+
+                    if (snap.exists()) {
+                        const arenaData = snap.data();
+                        joinedViaFirestore = true;
+                        onArenaDataUpdated(arenaData);
+
+                        // 登錄選手資訊至 Firestore
+                        const pRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players', myPlayerId);
+                        await setDoc(pRef, {
+                            id: myPlayerId,
+                            name: name,
+                            score: 0,
+                            round: arenaData.round || 1,
+                            updatedAt: new Date().toISOString()
+                        });
+
+                        // 學生端即時監聽老師的擂台狀態更新 (開始開戰、下一輪、結束)
+                        if (arenaUnsubDoc) arenaUnsubDoc();
+                        arenaUnsubDoc = onSnapshot(arenaDocRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                onArenaDataUpdated(docSnap.data());
+                            }
+                        }, (err) => {
+                            console.warn("Firestore 房間監聽提示:", err);
+                        });
+
+                        showToast("已成功透過雲端通道連入擂台！", true);
+                    }
+                } catch (err) {
+                    console.warn("Firestore 嘗試連線提示:", err);
+                }
+            }
+
+            // 雙軌策略二：WebRTC 點對點連線 (多組 STUN 輔助)
             initClientPeer(code, name);
         }
 
@@ -2391,7 +2518,8 @@
                 try { clientPeer.destroy(); } catch(e) {}
             }
 
-            clientPeer = new Peer();
+            // 傳入 Google STUN 伺服器配置以加強跨網域 P2P 連線
+            clientPeer = new Peer(peerIceConfig);
             clientPeer.on('open', () => {
                 const hostPeerId = `matharena-v2-${code}`;
                 clientConn = clientPeer.connect(hostPeerId, { reliable: true });
@@ -2708,12 +2836,23 @@
                 updatedAt: new Date().toISOString()
             };
 
-            // 推播比分 (帶入回合編號)
+            // 1. WebRTC 直連推播
             if (clientConn && clientConn.open) {
                 clientConn.send({ type: 'PLAYER_SCORE_UPDATE', round: currentRoundNumber, player: updateData });
             }
+
+            // 2. 本地廣播推播
             if (broadcastChannel) {
                 broadcastChannel.postMessage({ type: 'PLAYER_SCORE_UPDATE', arenaId: currentArenaId, round: currentRoundNumber, player: updateData });
+            }
+
+            // 3. Firestore 跨網域即時同步推播 (保障 4G / 跨 Wi-Fi 即時同步比分)
+            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+                try {
+                    const { doc, setDoc } = window.fbModules;
+                    const pDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId, 'players', myPlayerId);
+                    setDoc(pDocRef, updateData, { merge: true });
+                } catch(e) {}
             }
 
             if (myCurrentScore >= target) {
@@ -2723,6 +2862,13 @@
                 }
                 if (broadcastChannel) {
                     broadcastChannel.postMessage({ type: 'MATCH_WON', ...winPayload });
+                }
+                if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+                    try {
+                        const { doc, setDoc } = window.fbModules;
+                        const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
+                        setDoc(aRef, { status: 'ended', winner: updateData }, { merge: true });
+                    } catch(e) {}
                 }
                 stopCompSpeechRecognition();
                 return;
@@ -2764,6 +2910,15 @@
             if (!isTeacherHost) return;
             if (hostPeer) {
                 try { hostPeer.destroy(); } catch(e) {}
+            }
+            if (arenaUnsubPlayers) {
+                try { arenaUnsubPlayers(); } catch(e) {}
+            }
+            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+                try {
+                    const { doc, deleteDoc } = window.fbModules;
+                    deleteDoc(doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId));
+                } catch(e) {}
             }
             arenaState = null;
             currentArenaId = null;
