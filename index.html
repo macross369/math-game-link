@@ -873,6 +873,9 @@
                 <button id="subtab-btn-scores" onclick="switchTeacherSubTab('scores')" class="pb-2 text-gray-500 hover:text-indigo-600">
                     <i class="fa-solid fa-chart-line mr-1"></i> 測驗成績歷程檢視
                 </button>
+                <button id="subtab-btn-fbconfig" onclick="switchTeacherSubTab('fbconfig')" class="pb-2 text-gray-500 hover:text-indigo-600">
+                    <i class="fa-solid fa-cloud mr-1"></i> 跨網域連線設定 (Firebase)
+                </button>
             </div>
 
             <!-- 子功能 A：學生名單管理 -->
@@ -957,6 +960,32 @@
                             <!-- 動態填入成績紀錄 -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- 子功能 C：跨網域連線設定 (Firebase) -->
+            <div id="teacher-fbconfig-subview" class="hidden space-y-3.5">
+                <div class="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-gray-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-tower-broadcast text-indigo-600"></i> 跨網域連線狀態：
+                        </span>
+                        <span id="fb-connection-status-badge" class="px-2 py-0.5 rounded-full font-bold text-[11px] bg-amber-100 text-amber-800">
+                            🟡 本地通道模式 (P2P)
+                        </span>
+                    </div>
+                    <p class="text-gray-500 leading-relaxed text-[11px]">
+                        若學校平板使用不同 Wi-Fi、4G/5G 或有校園防火牆，貼上您自己的 Firebase 專案設定即可達成 100% 穿透防火牆跨網域對戰！
+                    </p>
+                    <textarea id="custom-fb-config-input" rows="4" placeholder='請貼上 Firebase Config JSON，例如：&#10;{&#10;  "apiKey": "...",&#10;  "authDomain": "...",&#10;  "projectId": "..."&#10;}' class="w-full p-2 bg-white border border-gray-300 rounded-xl font-mono text-[11px]"></textarea>
+                    <div class="flex gap-2">
+                        <button onclick="saveCustomFirebaseConfig()" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">
+                            儲存並套用連線設定
+                        </button>
+                        <button onclick="clearCustomFirebaseConfig()" class="py-2 px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl transition">
+                            清除重設
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1054,7 +1083,9 @@
                     { urls: 'stun:stun1.l.google.com:19302' },
                     { urls: 'stun:stun2.l.google.com:19302' },
                     { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' }
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    { urls: 'stun:stun.services.mozilla.com' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
                 ]
             }
         };
@@ -1087,8 +1118,17 @@
             const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, onSnapshot } = window.fbModules;
 
             try {
+                let cfg = null;
                 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                    const cfg = JSON.parse(__firebase_config);
+                    cfg = JSON.parse(__firebase_config);
+                } else {
+                    const savedCfg = localStorage.getItem('custom_firebase_config');
+                    if (savedCfg) {
+                        try { cfg = JSON.parse(savedCfg); } catch(e) {}
+                    }
+                }
+
+                if (cfg) {
                     fbApp = initializeApp(cfg);
                     fbAuth = getAuth(fbApp);
                     fbDb = getFirestore(fbApp);
@@ -1100,16 +1140,53 @@
                     }
                     isFbReady = true;
                     bindFirestoreRealtimeListeners();
+                    updateFbStatusBadge(true);
                 } else {
                     console.info("未檢測到 Firebase 配置，切換為本地廣播與 WebRTC 即時同步通道");
                     bindBroadcastRealtimeListeners();
+                    updateFbStatusBadge(false);
                 }
             } catch (err) {
                 console.warn("Firebase 初始化降級:", err);
                 bindBroadcastRealtimeListeners();
+                updateFbStatusBadge(false);
             }
         }
         window.initFirebaseSync = initFirebaseSync;
+
+        function updateFbStatusBadge(isOnline) {
+            const badge = document.getElementById('fb-connection-status-badge');
+            if (badge) {
+                badge.className = isOnline ? 
+                    "px-2 py-0.5 rounded-full font-bold text-[11px] bg-emerald-100 text-emerald-800" :
+                    "px-2 py-0.5 rounded-full font-bold text-[11px] bg-amber-100 text-amber-800";
+                badge.innerHTML = isOnline ? 
+                    '<i class="fa-solid fa-cloud"></i> 🟢 雲端跨網域通道已連線' : 
+                    '<i class="fa-solid fa-network-wired"></i> 🟡 本地通道模式 (P2P)';
+            }
+        }
+
+        function saveCustomFirebaseConfig() {
+            const text = document.getElementById('custom-fb-config-input').value.trim();
+            if (!text) {
+                showToast("請輸入有效的 Firebase Config JSON", false);
+                return;
+            }
+            try {
+                JSON.parse(text);
+                localStorage.setItem('custom_firebase_config', text);
+                showToast("設定已儲存！即將重新載入同步...", true);
+                setTimeout(() => location.reload(), 1000);
+            } catch(e) {
+                showToast("JSON 格式錯誤，請檢查！", false);
+            }
+        }
+
+        function clearCustomFirebaseConfig() {
+            localStorage.removeItem('custom_firebase_config');
+            showToast("已清除自訂設定", true);
+            setTimeout(() => location.reload(), 1000);
+        }
 
         function bindFirestoreRealtimeListeners() {
             if (!isFbReady || !fbDb || !window.fbModules) return;
@@ -2280,6 +2357,13 @@
             currentArenaId = code;
             isTeacherHost = true;
 
+            // 取消舊擂台的監聽器
+            if (arenaUnsubPlayers) {
+                try { arenaUnsubPlayers(); } catch(e) {}
+                arenaUnsubPlayers = null;
+            }
+
+            // 新設擂台：嚴格將名單重置為空白
             arenaState = {
                 id: code,
                 title: arenaName,
@@ -2294,6 +2378,9 @@
                 winner: null,
                 round: 1
             };
+
+            // 立即清空大廳 UI
+            renderLobbyPlayers({});
 
             compQuestionPool = buildQuestionsByMode(topic, mode);
 
@@ -2462,7 +2549,7 @@
             myCurrentScore = 0;
             isTeacherHost = false;
 
-            showToast("正在跨網域連線擂台...", true);
+            showToast("正在連線擂台，請稍候...", true);
 
             // 雙軌策略一：立即透過 Firestore 進行跨網域直連 (抗防火牆與不同網域)
             let joinedViaFirestore = false;
@@ -2474,6 +2561,10 @@
 
                     if (snap.exists()) {
                         const arenaData = snap.data();
+                        if (arenaData.status === 'dismissed') {
+                            showToast("該擂台已被解散！", false);
+                            return;
+                        }
                         joinedViaFirestore = true;
                         onArenaDataUpdated(arenaData);
 
@@ -2487,12 +2578,14 @@
                             updatedAt: new Date().toISOString()
                         });
 
-                        // 學生端即時監聽老師的擂台狀態更新 (開始開戰、下一輪、結束)
+                        // 學生端即時監聽老師的擂台狀態更新 (開始開戰、下一輪、解散、結束)
                         if (arenaUnsubDoc) arenaUnsubDoc();
                         arenaUnsubDoc = onSnapshot(arenaDocRef, (docSnap) => {
-                            if (docSnap.exists()) {
-                                onArenaDataUpdated(docSnap.data());
+                            if (!docSnap.exists() || docSnap.data().status === 'dismissed') {
+                                handleStudentArenaDismissed();
+                                return;
                             }
+                            onArenaDataUpdated(docSnap.data());
                         }, (err) => {
                             console.warn("Firestore 房間監聽提示:", err);
                         });
@@ -2504,7 +2597,7 @@
                 }
             }
 
-            // 雙軌策略二：WebRTC 點對點連線 (多組 STUN 輔助)
+            // 雙軌策略二：WebRTC 點對點連線 (多組 STUN 輔助，支援平板跨網域)
             initClientPeer(code, name);
         }
 
@@ -2518,7 +2611,7 @@
                 try { clientPeer.destroy(); } catch(e) {}
             }
 
-            // 傳入 Google STUN 伺服器配置以加強跨網域 P2P 連線
+            // 傳入 Google 與 Twilio STUN 伺服器配置以加強跨網域 P2P 連線
             clientPeer = new Peer(peerIceConfig);
             clientPeer.on('open', () => {
                 const hostPeerId = `matharena-v2-${code}`;
@@ -2532,6 +2625,8 @@
                 clientConn.on('data', (data) => {
                     if (data.type === 'ARENA_STATE_SYNC') {
                         onArenaDataUpdated(data.state);
+                    } else if (data.type === 'ARENA_DISMISSED') {
+                        handleStudentArenaDismissed();
                     }
                 });
 
@@ -2543,6 +2638,25 @@
             clientPeer.on('error', () => {
                 connectViaBroadcastOnly(code, name);
             });
+        }
+
+        function handleStudentArenaDismissed() {
+            if (isTeacherHost) return;
+            if (compNextQTimer) clearTimeout(compNextQTimer);
+            isCompAnswering = false;
+            stopCompSpeechRecognition();
+            if (arenaUnsubDoc) {
+                try { arenaUnsubDoc(); } catch(e) {}
+                arenaUnsubDoc = null;
+            }
+            if (clientPeer) {
+                try { clientPeer.destroy(); } catch(e) {}
+                clientPeer = null;
+            }
+            currentArenaId = null;
+            arenaState = null;
+            showToast("老師已解散該擂台，已自動返回擂台大廳", false);
+            showCompHomeView();
         }
 
         function connectViaBroadcastOnly(code, name) {
@@ -2567,7 +2681,9 @@
                         handleHostReceivedData(msg, null);
                     }
                 } else if (!isTeacherHost) {
-                    if (msg.type === 'ARENA_STATE_SYNC' && msg.state && msg.state.id === currentArenaId) {
+                    if (msg.type === 'ARENA_DISMISSED' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
+                        handleStudentArenaDismissed();
+                    } else if (msg.type === 'ARENA_STATE_SYNC' && msg.state && msg.state.id === currentArenaId) {
                         onArenaDataUpdated(msg.state);
                     }
                 }
@@ -2893,36 +3009,36 @@
                 <div class="flex items-center justify-between p-2 bg-indigo-50/50 rounded-xl">
                     <span class="font-bold text-gray-700">${idx + 1}. ${p.name}</span>
                     <span class="text-[11px] text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> 已就緒</span>
-                </div>
-            `).join('');
-        }
-
-        function startArenaMatch() {
-            if (!arenaState || !isTeacherHost) return;
-            arenaState.status = 'playing';
-            arenaState.winner = null;
-
-            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
-            onArenaDataUpdated(arenaState);
-        }
-
-        function dismissArena() {
+        async function dismissArena() {
             if (!isTeacherHost) return;
+            const targetCode = currentArenaId;
+
+            // 1. 廣播通知全體學生解散擂台
+            broadcastToAllStudents({ type: 'ARENA_DISMISSED', arenaId: targetCode });
+
             if (hostPeer) {
                 try { hostPeer.destroy(); } catch(e) {}
+                hostPeer = null;
             }
             if (arenaUnsubPlayers) {
                 try { arenaUnsubPlayers(); } catch(e) {}
+                arenaUnsubPlayers = null;
             }
-            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+            if (isFbReady && fbDb && window.fbModules && targetCode) {
                 try {
-                    const { doc, deleteDoc } = window.fbModules;
-                    deleteDoc(doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId));
+                    const { doc, setDoc, deleteDoc } = window.fbModules;
+                    const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', targetCode);
+                    // 先標記為 dismissed 確保學生監聽器觸發，再行刪除
+                    await setDoc(aRef, { status: 'dismissed' }, { merge: true });
+                    setTimeout(() => {
+                        deleteDoc(aRef).catch(() => {});
+                    }, 1000);
                 } catch(e) {}
             }
             arenaState = null;
             currentArenaId = null;
-            showToast("擂台已解散", true);
+            renderLobbyPlayers({});
+            showToast("擂台已解散，已通知全體選手退出", true);
             showCompHomeView();
         }
 
@@ -3178,21 +3294,32 @@
         function switchTeacherSubTab(sub) {
             const btnRoster = document.getElementById('subtab-btn-roster');
             const btnScores = document.getElementById('subtab-btn-scores');
+            const btnFb = document.getElementById('subtab-btn-fbconfig');
             const viewRoster = document.getElementById('teacher-roster-subview');
             const viewScores = document.getElementById('teacher-scores-subview');
+            const viewFb = document.getElementById('teacher-fbconfig-subview');
+
+            btnRoster.className = "pb-2 text-gray-500 hover:text-indigo-600";
+            btnScores.className = "pb-2 text-gray-500 hover:text-indigo-600";
+            btnFb.className = "pb-2 text-gray-500 hover:text-indigo-600";
+
+            viewRoster.classList.add('hidden');
+            viewScores.classList.add('hidden');
+            viewFb.classList.add('hidden');
 
             if (sub === 'roster') {
                 btnRoster.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
-                btnScores.className = "pb-2 text-gray-500 hover:text-indigo-600";
                 viewRoster.classList.remove('hidden');
-                viewScores.classList.add('hidden');
-            } else {
+            } else if (sub === 'scores') {
                 btnScores.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
-                btnRoster.className = "pb-2 text-gray-500 hover:text-indigo-600";
                 viewScores.classList.remove('hidden');
-                viewRoster.classList.add('hidden');
                 renderScoreFilterOptions();
                 renderScoresTable();
+            } else if (sub === 'fbconfig') {
+                btnFb.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
+                viewFb.classList.remove('hidden');
+                const saved = localStorage.getItem('custom_firebase_config') || '';
+                document.getElementById('custom-fb-config-input').value = saved;
             }
         }
 
