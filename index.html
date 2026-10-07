@@ -19,7 +19,6 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 掛載至 window 供全域邏輯呼叫
         window.fbModules = {
             initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
             getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc, getDoc
@@ -1324,7 +1323,7 @@
             }
         }
 
-        //        function updateModeOptions() {
+        function updateModeOptions() {
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const container = document.getElementById('mode-container');
             
@@ -1585,7 +1584,7 @@
             return list;
         }
 
-        //        function startGame() {
+        function startGame() {
             timeLimit = parseInt(document.getElementById('time-limit').value);
             const topic = document.querySelector('input[name="topic"]:checked').value;
             const mode = document.querySelector('input[name="mode"]:checked').value;
@@ -2049,7 +2048,7 @@
             document.getElementById('setup-screen').classList.remove('hidden');
         }
 
-        //        const worksheetMeta = {
+        const worksheetMeta = {
             multiply: {
                 title: '乘法運算',
                 btnClass: 'bg-rose-100 text-rose-800 border-rose-400 shadow-sm ring-2 ring-rose-200',
@@ -2248,7 +2247,7 @@
             html2pdf().from(element).set(opt).save();
         }
 
-        //        function hideAllCompViews() {
+        function hideAllCompViews() {
             const views = [
                 'comp-home-view', 'comp-create-view', 'comp-lobby-view',
                 'comp-join-view', 'comp-student-waiting-view', 'comp-student-play-view',
@@ -2496,7 +2495,7 @@
             }
         }
 
-        //        async function joinArenaSubmit() {
+        async function joinArenaSubmit() {
             const code = document.getElementById('join-arena-code').value.trim();
             const name = document.getElementById('join-player-name').value.trim();
 
@@ -2946,7 +2945,7 @@
             compNextQTimer = setTimeout(nextCompQuestion, 400);
         }
 
-        //        function renderLobbyPlayers(players) {
+        function renderLobbyPlayers(players) {
             const listContainer = document.getElementById('lobby-player-list');
             const countElem = document.getElementById('lobby-player-count');
             const pArray = Object.values(players || {});
@@ -3195,7 +3194,7 @@
             }
         }
 
-        //        function toggleStudentLogin() {
+        function toggleStudentLogin() {
             if (!currentStudent.isGuest) {
                 currentStudent = { name: '訪客選手', email: null, isGuest: true };
                 document.getElementById('current-user-name').innerText = currentStudent.name;
@@ -3352,7 +3351,7 @@
             showToast("已從名冊移除該學生並同步", true);
         }
 
-        //        function exportRosterCSV() {
+        function exportRosterCSV() {
             if (rosterList.length === 0) {
                 showToast("名冊目前為空，無法匯出！", false);
                 return;
