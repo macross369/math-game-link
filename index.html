@@ -1119,13 +1119,38 @@
 
             try {
                 let cfg = null;
+                // 1. 檢查平台預設變數
                 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                    cfg = JSON.parse(__firebase_config);
-                } else {
+                    try { cfg = JSON.parse(__firebase_config); } catch(e) {}
+                }
+                // 2. 檢查 URL 參數中是否由 QR 碼攜帶連線配置 (?fc=...)
+                if (!cfg) {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const fcParam = urlParams.get('fc');
+                    if (fcParam) {
+                        try {
+                            const decoded = decodeURIComponent(atob(fcParam));
+                            cfg = JSON.parse(decoded);
+                            localStorage.setItem('custom_firebase_config', JSON.stringify(cfg));
+                        } catch(e) {}
+                    }
+                }
+                // 3. 檢查本地自訂設定
+                if (!cfg) {
                     const savedCfg = localStorage.getItem('custom_firebase_config');
                     if (savedCfg) {
                         try { cfg = JSON.parse(savedCfg); } catch(e) {}
                     }
+                }
+                // 4. 若網站建置於 Firebase Hosting，自動載入本專案原生設定 (/__/firebase/init.json)
+                if (!cfg) {
+                    try {
+                        const fbInitResp = await fetch('/__/firebase/init.json');
+                        if (fbInitResp.ok) {
+                            cfg = await fbInitResp.json();
+                            console.log("✅ 成功從 Firebase Hosting 自動載入專案設定 /__/firebase/init.json");
+                        }
+                    } catch(e) {}
                 }
 
                 if (cfg) {
@@ -1133,11 +1158,17 @@
                     fbAuth = getAuth(fbApp);
                     fbDb = getFirestore(fbApp);
 
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(fbAuth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(fbAuth);
+                    // 嘗試進行匿名身分驗證 (加入安全容錯，避免未開啟匿名驗證時阻斷連線)
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(fbAuth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(fbAuth);
+                        }
+                    } catch(authErr) {
+                        console.warn("Firebase 認證提示 (如未開啟匿名登入，將嘗試以公開規則直連):", authErr);
                     }
+
                     isFbReady = true;
                     bindFirestoreRealtimeListeners();
                     updateFbStatusBadge(true);
@@ -2416,8 +2447,24 @@
             document.getElementById('lobby-arena-speech-badge').innerText = enableSpeech ? '語音：已開啟' : '語音：已停用';
             document.getElementById('lobby-arena-speech-badge').className = enableSpeech ? 'font-bold text-amber-200' : 'font-bold text-red-200';
 
-            const joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
-            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(joinUrl)}`;
+            // 建立加入連結 (若有自訂設定則透過 URL 參數傳遞，確保學生平板掃碼即擁有 Firebase 連線)
+            let joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
+            const savedCfg = localStorage.getItem('custom_firebase_config');
+            if (savedCfg) {
+                try {
+                    const parsed = JSON.parse(savedCfg);
+                    const compact = {
+                        apiKey: parsed.apiKey,
+                        authDomain: parsed.authDomain,
+                        projectId: parsed.projectId,
+                        storageBucket: parsed.storageBucket,
+                        messagingSenderId: parsed.messagingSenderId,
+                        appId: parsed.appId
+                    };
+                    joinUrl += '&fc=' + btoa(encodeURIComponent(JSON.stringify(compact)));
+                } catch(e) {}
+            }
+            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
             document.getElementById('lobby-qrcode-img').src = qrApiUrl;
 
             hideAllCompViews();
@@ -2999,6 +3046,32 @@
             `).join('');
         }
 
+        function startArenaMatch() {
+            if (!arenaState || !isTeacherHost) return;
+            const pCount = Object.keys(arenaState.players || {}).length;
+            if (pCount === 0) {
+                showToast("目前尚無選手加入擂台！請等待學生加入或開啟測試分頁", false);
+            }
+
+            arenaState.status = 'playing';
+            arenaState.round = 1;
+            arenaState.winner = null;
+
+            // 重置所有選手分數與第一回合狀態
+            if (arenaState.players) {
+                Object.keys(arenaState.players).forEach(pId => {
+                    arenaState.players[pId].score = 0;
+                    arenaState.players[pId].round = 1;
+                    arenaState.players[pId].updatedAt = new Date().toISOString();
+                });
+            }
+
+            // 廣播給所有學生與 Firestore 雲端資料庫
+            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+            onArenaDataUpdated(arenaState);
+            showToast("比賽開始！全員同步開戰中！", true);
+        }
+
         async function dismissArena() {
             if (!isTeacherHost) return;
             const targetCode = currentArenaId;
@@ -3024,33 +3097,34 @@
                         deleteDoc(aRef).catch(() => {});
                     }, 1000);
                 } catch(e) {}
-            }
-            arenaState = null;
-            currentArenaId = null;
-            renderLobbyPlayers({});
-            showToast("擂台已解散，已通知全體選手退出", true);
-            showCompHomeView();
-        }
-
-        function renderMonitorBoard(players) {
-            const board = document.getElementById('monitor-player-board');
-            const pArray = Object.values(players || {}).sort((a, b) => (b.score || 0) - (a.score || 0));
-            const target = arenaState.targetScore || 5;
-
-            if (pArray.length === 0) {
-                board.innerHTML = `<div class="text-center text-xs text-gray-400 py-4">目前尚無選手進行作答</div>`;
-                return;
-            }
-
-            board.innerHTML = pArray.map(p => {
-                const score = p.score || 0;
-                const pct = Math.min(100, Math.round((score / target) * 100));
-                return `
-                    <div class="space-y-1">
-                        <div class="flex justify-between text-xs font-bold">
-                            <span class="text-gray-800">${p.name}</span>
-                            <span class="text-indigo-600">${isScoreHidden ? '***' : `${score} 分`}</span>
-                        </div>
+            <!-- 子功能 C：跨網域連線設定 (Firebase) -->
+            <div id="teacher-fbconfig-subview" class="hidden space-y-3.5">
+                <div class="p-3.5 bg-indigo-50/70 border border-indigo-100 rounded-2xl space-y-2.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-gray-800 flex items-center gap-1.5">
+                            <i class="fa-solid fa-tower-broadcast text-indigo-600"></i> 跨網域連線狀態：
+                        </span>
+                        <span id="fb-connection-status-badge" class="px-2 py-0.5 rounded-full font-bold text-[11px] bg-amber-100 text-amber-800">
+                            🟡 本地通道模式 (P2P)
+                        </span>
+                    </div>
+                    <div class="p-2.5 bg-white rounded-xl border border-indigo-200 text-indigo-900 text-[11px] space-y-1">
+                        <div class="font-bold flex items-center gap-1"><i class="fa-solid fa-circle-info text-indigo-600"></i> Firebase 部署連線檢查：</div>
+                        <div>1. <b>Firebase Hosting</b>：系統會自動抓取 <code>/__/firebase/init.json</code>，所有平板開網頁即自動連線。</div>
+                        <div>2. <b>Firebase 控制台設定提醒</b>：請至 Firebase Console ➔ <b>Authentication</b> ➔ Sign-in method 啟用<b>「匿名 (Anonymous)」</b>登入。</div>
+                        <div>3. <b>Firestore 規則</b>：請確認 Firestore Database 的安全規則允許讀寫。</div>
+                    </div>
+                    <textarea id="custom-fb-config-input" rows="4" placeholder='若需手動指定專案，請貼上 Firebase Config JSON，例如：&#10;{&#10;  "apiKey": "...",&#10;  "authDomain": "...",&#10;  "projectId": "..."&#10;}' class="w-full p-2 bg-white border border-gray-300 rounded-xl font-mono text-[11px]"></textarea>
+                    <div class="flex gap-2">
+                        <button onclick="saveCustomFirebaseConfig()" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition">
+                            儲存並套用連線設定
+                        </button>
+                        <button onclick="clearCustomFirebaseConfig()" class="py-2 px-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl transition">
+                            清除重設
+                        </button>
+                    </div>
+                </div>
+            </div>
                         <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
                             <div class="bg-indigo-600 h-full transition-all duration-300" style="width: ${isScoreHidden ? '50%' : `${pct}%`}"></div>
                         </div>
