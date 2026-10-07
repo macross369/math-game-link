@@ -1425,20 +1425,6 @@
                         </div>
 
                         <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
-                            <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別二：十十乘法</div>
-                            <div class="grid grid-cols-1 gap-2">
-                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
-                                    <input type="radio" name="mode" value="mul-10x10-standard" class="${currentTheme.radio} h-4 w-4">
-                                    <span class="ml-2 text-sm font-bold text-gray-800">標準模式 (2×1與1×2不同，共100題)</span>
-                                </label>
-                                <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
-                                    <input type="radio" name="mode" value="mul-10x10-same" class="${currentTheme.radio} h-4 w-4">
-                                    <span class="ml-2 text-sm font-bold text-gray-800">精簡模式 (2×1與1×2相同，共55題)</span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="${currentTheme.cardBg} p-3.5 rounded-2xl border space-y-2">
                             <div class="text-sm font-extrabold ${currentTheme.badge} px-3 py-1 rounded-lg inline-block border">類別三：特殊計算</div>
                             <div class="grid grid-cols-1 gap-2">
                                 <label class="flex items-center p-2.5 ${currentTheme.labelBorder} rounded-xl cursor-pointer transition shadow-sm">
@@ -3009,6 +2995,10 @@
                 <div class="flex items-center justify-between p-2 bg-indigo-50/50 rounded-xl">
                     <span class="font-bold text-gray-700">${idx + 1}. ${p.name}</span>
                     <span class="text-[11px] text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> 已就緒</span>
+                </div>
+            `).join('');
+        }
+
         async function dismissArena() {
             if (!isTeacherHost) return;
             const targetCode = currentArenaId;
