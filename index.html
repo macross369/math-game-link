@@ -1050,6 +1050,7 @@
         let compNextQTimer = null; // 計時器控制，防舊題連鎖觸發
         let arenaUnsubDoc = null; // Firestore 房間即時監聽清理器
         let arenaUnsubPlayers = null; // Firestore 選手即時監聽清理器
+        let arenaUnsubMyPlayer = null; // Firestore 個人選手狀態監聽清理器
         let countdownTimer = null; // 3-2-1 倒數計時器
         let currentCountdownRound = 0; // 避免同回合重複觸發倒數
 
@@ -2545,31 +2546,58 @@
 
             showToast("正在產生 A4 置中題庫 PDF，請稍候...", true);
 
-            // 建立獨立置中複製節點進行渲染，避免受限於外層卡片位移導致左側裁切
+            // 將輸出容器精準錨定於視窗左上角 (left:0, top:0)，消除任何視窗置中產生的水平座標偏移
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.left = '0';
+            overlay.style.top = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.backgroundColor = '#ffffff';
+            overlay.style.zIndex = '99999';
+            overlay.style.overflow = 'auto';
+
             const wrapper = document.createElement('div');
-            wrapper.style.position = 'fixed';
+            wrapper.style.position = 'relative';
             wrapper.style.left = '0';
             wrapper.style.top = '0';
-            wrapper.style.width = '710px';
+            wrapper.style.width = '680px';
             wrapper.style.backgroundColor = '#ffffff';
-            wrapper.style.zIndex = '-9999';
+            wrapper.style.margin = '0';
             wrapper.style.padding = '12px 16px';
             wrapper.style.boxSizing = 'border-box';
 
             const clone = element.cloneNode(true);
             clone.style.width = '100%';
             clone.style.maxWidth = '100%';
-            clone.style.margin = '0 auto';
+            clone.style.margin = '0';
             clone.style.boxShadow = 'none';
             clone.style.border = 'none';
-            clone.style.padding = '8px 12px';
+            clone.style.padding = '0';
+
+            // 優化 PDF 匯出時的垂直列距，確保 72 題 (24 列) 完整容納於單張 A4 頁面內，消除跨頁間距異常變大問題
+            const qContainer = clone.querySelector('#ws-questions-container');
+            if (qContainer) {
+                qContainer.classList.remove('space-y-2');
+                qContainer.style.display = 'flex';
+                qContainer.style.flexDirection = 'column';
+                qContainer.style.gap = '3px';
+            }
+            const rows = clone.querySelectorAll('.worksheet-row');
+            rows.forEach(r => {
+                r.style.paddingTop = '2px';
+                r.style.paddingBottom = '3px';
+                r.style.margin = '0';
+            });
 
             wrapper.appendChild(clone);
-            document.body.appendChild(wrapper);
+            overlay.appendChild(wrapper);
+            document.body.appendChild(overlay);
 
             setTimeout(() => {
+                // A4 寬度 210mm，左右各留 15mm 邊界，內容寬度精準對應 180mm (680px) 達到完美置中
                 const opt = {
-                    margin:       [10, 12, 12, 12],
+                    margin:       [10, 15, 10, 15],
                     filename:     fileName,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { 
@@ -2580,22 +2608,28 @@
                         y: 0,
                         scrollX: 0,
                         scrollY: 0,
-                        width: 710,
-                        windowWidth: 710
+                        width: 680,
+                        windowWidth: 680
                     },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak:    { mode: ['css', 'legacy'], avoid: '.worksheet-row' }
                 };
 
-                html2pdf().from(wrapper).set(opt).save().then(() => {
-                    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+                html2pdf().from(wrapper).set(opt).toPdf().get('pdf').then((pdf) => {
+                    const totalPages = pdf.internal.getNumberOfPages();
+                    // 若內容高度實際上可完全容納在第一頁內（約 <= 1045px），卻因邊界微幅溢出產生完全空白的第二頁，直接移除該空白頁
+                    if (totalPages === 2 && wrapper.scrollHeight <= 1045) {
+                        pdf.deletePage(2);
+                    }
+                    pdf.save(fileName);
+                    if (document.body.contains(overlay)) document.body.removeChild(overlay);
                     showToast("題庫 PDF 下載完成！", true);
                 }).catch((err) => {
                     console.error("PDF 匯出錯誤:", err);
-                    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+                    if (document.body.contains(overlay)) document.body.removeChild(overlay);
                     showToast("PDF 匯出發生異常，建議改用「立即列印」另存 PDF", false);
                 });
-            }, 150);
+            }, 250);
         }
 
         function hideAllCompViews() {
@@ -2924,6 +2958,19 @@
                             console.warn("Firestore 房間監聽提示:", err);
                         });
 
+                        // 額外監聽學生個人選手文件，一旦老師移除並刪除該文件，學生端立即同步斷線退出
+                        if (arenaUnsubMyPlayer) arenaUnsubMyPlayer();
+                        let hasConfirmedJoined = false;
+                        arenaUnsubMyPlayer = onSnapshot(pRef, (playerSnap) => {
+                            if (playerSnap.exists()) {
+                                hasConfirmedJoined = true;
+                            } else if (hasConfirmedJoined && !isTeacherHost && currentArenaId === code) {
+                                handleStudentKicked();
+                            }
+                        }, (err) => {
+                            console.warn("Firestore 個人選手監聽提示:", err);
+                        });
+
                         showToast("已成功透過雲端通道連入擂台！", true);
                     }
                 } catch (err) {
@@ -2994,6 +3041,10 @@
                 try { arenaUnsubDoc(); } catch(e) {}
                 arenaUnsubDoc = null;
             }
+            if (arenaUnsubMyPlayer) {
+                try { arenaUnsubMyPlayer(); } catch(e) {}
+                arenaUnsubMyPlayer = null;
+            }
             if (clientConn) {
                 try { clientConn.close(); } catch(e) {}
                 clientConn = null;
@@ -3021,6 +3072,10 @@
             if (arenaUnsubDoc) {
                 try { arenaUnsubDoc(); } catch(e) {}
                 arenaUnsubDoc = null;
+            }
+            if (arenaUnsubMyPlayer) {
+                try { arenaUnsubMyPlayer(); } catch(e) {}
+                arenaUnsubMyPlayer = null;
             }
             if (clientPeer) {
                 try { clientPeer.destroy(); } catch(e) {}
@@ -3108,6 +3163,12 @@
         }
 
         function onArenaDataUpdated(data) {
+            // 若學生端收到最新狀態中明確包含自己被踢除的標記，立即強制退出
+            if (!isTeacherHost && data && data.kickedPlayers && data.kickedPlayers[myPlayerId]) {
+                handleStudentKicked();
+                return;
+            }
+
             const previousStatus = arenaState?.status;
             arenaState = data;
 
@@ -3489,7 +3550,10 @@
                     const pDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId, 'players', playerId);
                     await deleteDoc(pDocRef);
                     const aDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
-                    await setDoc(aDocRef, { kickedPlayers: arenaState.kickedPlayers }, { merge: true });
+                    await setDoc(aDocRef, { 
+                        players: arenaState.players || {},
+                        kickedPlayers: arenaState.kickedPlayers 
+                    }, { merge: true });
                 } catch(e) {
                     console.warn("Firestore 移除選手同步提示:", e);
                 }
