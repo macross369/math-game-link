@@ -287,10 +287,14 @@
                     <button onclick="downloadPDF()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
                         <i class="fa-solid fa-file-pdf"></i> 下載錯題 PDF 檔
                     </button>
-                    <button onclick="resetGame()" class="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
+                    <button onclick="startGame()" class="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
                         <i class="fa-solid fa-rotate-right"></i> 再次挑戰
                     </button>
                 </div>
+
+                <button onclick="resetGame()" class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm">
+                    <i class="fa-solid fa-house"></i> 回首頁
+                </button>
             </div>
         </div>
 
@@ -548,6 +552,19 @@
                     <button onclick="startArenaMatch()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-play"></i> 全員開戰！
                     </button>
+                </div>
+            </div>
+
+            <!-- 3-2-1 倒數計時全螢幕遮罩 (老師主控與參賽學生同步顯示) -->
+            <div id="comp-countdown-overlay" class="fixed inset-0 bg-indigo-950/90 backdrop-blur-md hidden flex-col items-center justify-center z-50 text-white select-none">
+                <div class="text-sm md:text-lg font-extrabold tracking-widest text-amber-300 uppercase mb-3 animate-pulse">
+                    <i class="fa-solid fa-bolt mr-1.5"></i> 比賽即將開始，請準備！
+                </div>
+                <div id="comp-countdown-number" class="text-8xl md:text-9xl font-black text-white drop-shadow-[0_0_30px_rgba(251,191,36,0.9)] transition-transform duration-300 scale-110">
+                    3
+                </div>
+                <div class="mt-6 text-xs md:text-sm text-indigo-200 font-bold">
+                    專注題目，準備搶答！
                 </div>
             </div>
 
@@ -1033,6 +1050,8 @@
         let compNextQTimer = null; // 計時器控制，防舊題連鎖觸發
         let arenaUnsubDoc = null; // Firestore 房間即時監聽清理器
         let arenaUnsubPlayers = null; // Firestore 選手即時監聽清理器
+        let countdownTimer = null; // 3-2-1 倒數計時器
+        let currentCountdownRound = 0; // 避免同回合重複觸發倒數
 
         // WebRTC 跨網域公共 STUN 伺服器配置清單 (強化穿透防火牆)
         const peerIceConfig = {
@@ -1061,6 +1080,17 @@
         let isFbReady = false;
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'math-challenge-champion';
 
+        // 攔截沙盒環境 (如 Canvas 預覽) 對外部 PeerJS WebSocket 的安全性限制錯誤
+        window.addEventListener('unhandledrejection', function(event) {
+            if (event.reason && (
+                (event.reason.name === 'SecurityError' && String(event.reason.message || '').includes('peerjs')) ||
+                String(event.reason).includes('peerjs')
+            )) {
+                event.preventDefault();
+                console.info("偵測到沙盒預覽環境限制外部 WebSocket，已自動降級為雲端/本地廣播通道。");
+            }
+        });
+
         window.onload = function() {
             updateModeOptions();
             initWorksheetSection();
@@ -1071,14 +1101,292 @@
             }
         };
 
-        // ================== 多載具即時同步系統 (Firebase + BroadcastChannel) ==================
+        // ================== URL 參數自動帶入擂台代碼 (QR碼掃描進入) ==================
+        function checkUrlArenaParams() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const arenaCode = urlParams.get('arena');
+                if (arenaCode) {
+                    switchMainTab('comp');
+                    showJoinArenaView();
+                    const codeInput = document.getElementById('join-arena-code');
+                    if (codeInput) {
+                        codeInput.value = arenaCode.trim().slice(0, 3);
+                    }
+                    showToast(`已自動帶入擂台代碼 ${arenaCode}，請輸入姓名進入！`, true);
+                }
+            } catch (e) {
+                console.warn("解析 URL 參數提示:", e);
+            }
+        }
+
+        // ================== 學生登入與教師後台控制函式 ==================
+        function toggleStudentLogin() {
+            if (!currentStudent.isGuest) {
+                currentStudent = { name: '訪客選手', email: null, isGuest: true };
+                document.getElementById('current-user-name').innerText = '訪客選手';
+                document.getElementById('auth-action-btn').innerHTML = '<i class="fa-brands fa-google text-xs"></i> 登入';
+                showToast("已登出學生帳號", true);
+                return;
+            }
+            const modal = document.getElementById('student-login-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeStudentLoginModal() {
+            const modal = document.getElementById('student-login-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmStudentLogin() {
+            const nameInput = document.getElementById('login-student-name').value.trim();
+            const emailInput = document.getElementById('login-student-email').value.trim().toLowerCase();
+            if (!emailInput) {
+                showToast("請輸入 Google 信箱帳號！", false);
+                return;
+            }
+            const matched = rosterList.find(s => s.email && s.email.toLowerCase() === emailInput);
+            const finalName = matched ? matched.name : (nameInput || emailInput.split('@')[0]);
+
+            currentStudent = { name: finalName, email: emailInput, isGuest: false };
+            document.getElementById('current-user-name').innerText = `${finalName} (${emailInput})`;
+            document.getElementById('auth-action-btn').innerHTML = '<i class="fa-solid fa-right-from-bracket text-xs"></i> 登出';
+            closeStudentLoginModal();
+            showToast(`歡迎回來，${finalName}！測驗成績將自動記錄`, true);
+        }
+
+        function promptTeacherLogin() {
+            const modal = document.getElementById('teacher-auth-modal');
+            document.getElementById('teacher-pwd-input').value = '';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => document.getElementById('teacher-pwd-input').focus(), 100);
+        }
+
+        function closeTeacherAuthModal() {
+            const modal = document.getElementById('teacher-auth-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function verifyTeacherPassword() {
+            const pwd = document.getElementById('teacher-pwd-input').value;
+            if (pwd === 'Rccbok6869') {
+                closeTeacherAuthModal();
+                openTeacherDashboard();
+            } else {
+                showToast("密碼錯誤！", false);
+                document.getElementById('teacher-pwd-input').value = '';
+            }
+        }
+
+        function openTeacherDashboard() {
+            if (isAnswering) abortGame();
+            stopCompSpeechRecognition();
+            document.getElementById('interactive-section').classList.add('hidden');
+            document.getElementById('worksheet-section').classList.add('hidden');
+            document.getElementById('comp-section').classList.add('hidden');
+            document.getElementById('teacher-section').classList.remove('hidden');
+            renderRosterTable();
+            renderScoreFilterOptions();
+            renderScoresTable();
+        }
+
+        function closeTeacherDashboard() {
+            document.getElementById('teacher-section').classList.add('hidden');
+            switchMainTab(activeTab || 'interactive');
+        }
+
+        function switchTeacherSubTab(subTab) {
+            const tabs = ['roster', 'scores', 'fbconfig'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`subtab-btn-${t}`);
+                const view = document.getElementById(`teacher-${t}-subview`);
+                if (t === subTab) {
+                    btn.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
+                    view.classList.remove('hidden');
+                } else {
+                    btn.className = "pb-2 text-gray-500 hover:text-indigo-600";
+                    view.classList.add('hidden');
+                }
+            });
+            if (subTab === 'scores') {
+                renderScoreFilterOptions();
+                renderScoresTable();
+            }
+        }
+
+        function addStudentToRoster() {
+            const name = document.getElementById('roster-name-input').value.trim();
+            const email = document.getElementById('roster-email-input').value.trim().toLowerCase();
+            if (!name || !email) {
+                showToast("請完整輸入學生姓名與 Google 信箱！", false);
+                return;
+            }
+            const existIdx = rosterList.findIndex(s => s.email.toLowerCase() === email);
+            if (existIdx >= 0) {
+                rosterList[existIdx].name = name;
+            } else {
+                rosterList.push({
+                    id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                    name,
+                    email
+                });
+            }
+            document.getElementById('roster-name-input').value = '';
+            document.getElementById('roster-email-input').value = '';
+            syncRosterChange();
+            showToast(`已將「${name}」加入學生名冊`, true);
+        }
+
+        async function removeStudentFromRoster(id) {
+            const target = rosterList.find(s => s.id === id);
+            rosterList = rosterList.filter(s => s.id !== id);
+            renderRosterTable();
+            renderScoreFilterOptions();
+
+            if (isFbReady && fbDb && window.fbModules && id) {
+                try {
+                    const { doc, deleteDoc } = window.fbModules;
+                    await deleteDoc(doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'roster', id));
+                } catch (e) {}
+            }
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'SYNC_ROSTER_UPDATE', roster: rosterList });
+            }
+            showToast(`已移除學生${target ? '「' + target.name + '」' : ''}`, true);
+        }
+
+        function renderRosterTable() {
+            const tbody = document.getElementById('roster-table-body');
+            const countEl = document.getElementById('roster-count');
+            if (countEl) countEl.innerText = rosterList.length;
+            if (!tbody) return;
+
+            if (rosterList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400">尚未建檔任何學生名單</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = rosterList.map((st, idx) => `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-2.5 text-gray-500">${idx + 1}</td>
+                    <td class="p-2.5 font-bold text-gray-800">${st.name}</td>
+                    <td class="p-2.5 text-indigo-600">${st.email}</td>
+                    <td class="p-2.5 text-center">
+                        <button onclick="removeStudentFromRoster('${st.id}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-bold transition">刪除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderScoreFilterOptions() {
+            const select = document.getElementById('score-filter-student');
+            if (!select) return;
+            const prev = select.value;
+            const names = new Set(['ALL']);
+            rosterList.forEach(s => names.add(s.name));
+            scoreHistory.forEach(r => names.add(r.studentName));
+
+            select.innerHTML = Array.from(names).map(n => 
+                n === 'ALL' ? `<option value="ALL">全部學生 (${scoreHistory.length} 筆)</option>` : `<option value="${n}">${n}</option>`
+            ).join('');
+            if (Array.from(names).includes(prev)) select.value = prev;
+        }
+
+        function exportRosterCSV() {
+            const bom = '\uFEFF';
+            const rows = [['序號', '學生姓名', 'Google信箱']];
+            rosterList.forEach((s, idx) => rows.push([idx + 1, s.name, s.email]));
+            const csvContent = bom + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `數學挑戰王_學生名冊_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast("學生名冊 CSV 已匯出！", true);
+        }
+
+        function downloadRosterTemplate() {
+            const bom = '\uFEFF';
+            const csvContent = bom + "序號,學生姓名,Google信箱\n1,王小明,xiaoming@gmail.com\n2,李小華,xiaohua@gmail.com";
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "學生名冊匯入範本.csv";
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function triggerImportCSV() {
+            document.getElementById('roster-file-input').click();
+        }
+
+        function handleRosterFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                let importedCount = 0;
+                try {
+                    if (file.name.endsWith('.json')) {
+                        const arr = JSON.parse(text);
+                        if (Array.isArray(arr)) {
+                            arr.forEach(item => {
+                                if (item.name && item.email) {
+                                    rosterList.push({
+                                        id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                        name: String(item.name).trim(),
+                                        email: String(item.email).trim().toLowerCase()
+                                    });
+                                    importedCount++;
+                                }
+                            });
+                        }
+                    } else {
+                        const lines = text.split(/\r?\n/).filter(l => l.trim());
+                        lines.forEach((line, idx) => {
+                            const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+                            if (idx === 0 && (cols[0].includes('序號') || cols[0].includes('姓名') || cols[1]?.includes('姓名'))) return;
+                            const name = cols.length >= 3 ? cols[1] : cols[0];
+                            const email = cols.length >= 3 ? cols[2] : cols[1];
+                            if (name && email && email.includes('@')) {
+                                const exist = rosterList.find(s => s.email.toLowerCase() === email.toLowerCase());
+                                if (exist) {
+                                    exist.name = name;
+                                } else {
+                                    rosterList.push({
+                                        id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                                        name,
+                                        email: email.toLowerCase()
+                                    });
+                                }
+                                importedCount++;
+                            }
+                        });
+                    }
+                    syncRosterChange();
+                    showToast(`成功匯入 ${importedCount} 筆學生資料！`, true);
+                } catch (err) {
+                    showToast("檔案解析失敗，請確認格式是否正確", false);
+                }
+                event.target.value = '';
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        // ================== Firebase 跨網域同步引擎 ==================
         async function initFirebaseSync() {
             if (!window.fbModules) return;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, onSnapshot } = window.fbModules;
-
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.fbModules;
             try {
                 let cfg = null;
-                // 1. 檢查平台預設變數
+                // 1. 檢查平台全域環境配置
                 if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                     try { cfg = JSON.parse(__firebase_config); } catch(e) {}
                 }
@@ -2235,16 +2543,59 @@
                 `數學測驗卷_${worksheetMeta[currentWorksheetTopic].title}_${modeName}.pdf` : 
                 `數學背誦卷_${worksheetMeta[currentWorksheetTopic].title}_${modeName}.pdf`;
 
-            const opt = {
-                margin:       [10, 10, 12, 10],
-                filename:     fileName,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, logging: false },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-            };
+            showToast("正在產生 A4 置中題庫 PDF，請稍候...", true);
 
-            html2pdf().from(element).set(opt).save();
+            // 建立獨立置中複製節點進行渲染，避免受限於外層卡片位移導致左側裁切
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'fixed';
+            wrapper.style.left = '0';
+            wrapper.style.top = '0';
+            wrapper.style.width = '710px';
+            wrapper.style.backgroundColor = '#ffffff';
+            wrapper.style.zIndex = '-9999';
+            wrapper.style.padding = '12px 16px';
+            wrapper.style.boxSizing = 'border-box';
+
+            const clone = element.cloneNode(true);
+            clone.style.width = '100%';
+            clone.style.maxWidth = '100%';
+            clone.style.margin = '0 auto';
+            clone.style.boxShadow = 'none';
+            clone.style.border = 'none';
+            clone.style.padding = '8px 12px';
+
+            wrapper.appendChild(clone);
+            document.body.appendChild(wrapper);
+
+            setTimeout(() => {
+                const opt = {
+                    margin:       [10, 12, 12, 12],
+                    filename:     fileName,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { 
+                        scale: 2, 
+                        useCORS: true, 
+                        logging: false,
+                        x: 0,
+                        y: 0,
+                        scrollX: 0,
+                        scrollY: 0,
+                        width: 710,
+                        windowWidth: 710
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'], avoid: '.worksheet-row' }
+                };
+
+                html2pdf().from(wrapper).set(opt).save().then(() => {
+                    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+                    showToast("題庫 PDF 下載完成！", true);
+                }).catch((err) => {
+                    console.error("PDF 匯出錯誤:", err);
+                    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+                    showToast("PDF 匯出發生異常，建議改用「立即列印」另存 PDF", false);
+                });
+            }, 150);
         }
 
         function hideAllCompViews() {
@@ -2356,6 +2707,12 @@
                     arenaUnsubPlayers = onSnapshot(playersCol, (snapshot) => {
                         snapshot.docChanges().forEach((change) => {
                             const pData = change.doc.data();
+                            if (change.type === 'removed') {
+                                if (arenaState.players && pData && pData.id) {
+                                    delete arenaState.players[pData.id];
+                                }
+                                return;
+                            }
                             if (pData) {
                                 if (!arenaState.players) arenaState.players = {};
                                 arenaState.players[pData.id] = pData;
@@ -2414,31 +2771,40 @@
 
         function initHostPeer(code) {
             if (typeof Peer === 'undefined') return;
+            // 偵測若在受限 iframe 沙盒環境 (如 about:srcdoc) 中，跳過外部 WebSocket 以免觸發 SecurityError
+            if (window.location.protocol === 'about:' || window.location.href.startsWith('about:srcdoc')) {
+                console.info("預覽沙盒環境中，跳過 PeerJS WebSocket，改用本地廣播與雲端同步。");
+                return;
+            }
             if (hostPeer) {
                 try { hostPeer.destroy(); } catch(e) {}
             }
 
-            const peerId = `matharena-v2-${code}`;
-            hostPeer = new Peer(peerId, peerIceConfig);
+            try {
+                const peerId = `matharena-v2-${code}`;
+                hostPeer = new Peer(peerId, peerIceConfig);
 
-            hostPeer.on('connection', (conn) => {
-                conn.on('open', () => {
-                    connectedClients[conn.peer] = conn;
-                    conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                hostPeer.on('connection', (conn) => {
+                    conn.on('open', () => {
+                        connectedClients[conn.peer] = conn;
+                        conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                    });
+
+                    conn.on('data', (data) => {
+                        handleHostReceivedData(data, conn);
+                    });
+
+                    conn.on('close', () => {
+                        delete connectedClients[conn.peer];
+                    });
                 });
 
-                conn.on('data', (data) => {
-                    handleHostReceivedData(data, conn);
+                hostPeer.on('error', (err) => {
+                    console.info("PeerJS 主機提示 (將以雲端資料庫/本地廣播保持通訊):", err.type || err);
                 });
-
-                conn.on('close', () => {
-                    delete connectedClients[conn.peer];
-                });
-            });
-
-            hostPeer.on('error', (err) => {
-                console.info("PeerJS 主機提示 (將以雲端資料庫保持跨網域通訊):", err.type || err);
-            });
+            } catch (e) {
+                console.info("PeerJS 初始化已安全降級:", e.message || e);
+            }
         }
 
         function handleHostReceivedData(data, conn) {
@@ -2527,7 +2893,9 @@
                             showToast("該擂台已被解散！", false);
                             return;
                         }
-                        onArenaDataUpdated(arenaData);
+                        if (arenaData.kickedPlayers && arenaData.kickedPlayers[myPlayerId]) {
+                            delete arenaData.kickedPlayers[myPlayerId];
+                        }
 
                         const pRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players', myPlayerId);
                         await setDoc(pRef, {
@@ -2538,13 +2906,20 @@
                             updatedAt: new Date().toISOString()
                         });
 
+                        onArenaDataUpdated(arenaData);
+
                         if (arenaUnsubDoc) arenaUnsubDoc();
                         arenaUnsubDoc = onSnapshot(arenaDocRef, (docSnap) => {
                             if (!docSnap.exists() || docSnap.data().status === 'dismissed') {
                                 handleStudentArenaDismissed();
                                 return;
                             }
-                            onArenaDataUpdated(docSnap.data());
+                            const latestData = docSnap.data();
+                            if (latestData.kickedPlayers && latestData.kickedPlayers[myPlayerId]) {
+                                handleStudentKicked();
+                                return;
+                            }
+                            onArenaDataUpdated(latestData);
                         }, (err) => {
                             console.warn("Firestore 房間監聽提示:", err);
                         });
@@ -2560,7 +2935,7 @@
         }
 
         function initClientPeer(code, name) {
-            if (typeof Peer === 'undefined') {
+            if (typeof Peer === 'undefined' || window.location.protocol === 'about:' || window.location.href.startsWith('about:srcdoc')) {
                 connectViaBroadcastOnly(code, name);
                 return;
             }
@@ -2569,37 +2944,78 @@
                 try { clientPeer.destroy(); } catch(e) {}
             }
 
-            clientPeer = new Peer(peerIceConfig);
-            clientPeer.on('open', () => {
-                const hostPeerId = `matharena-v2-${code}`;
-                clientConn = clientPeer.connect(hostPeerId, { reliable: true });
+            try {
+                clientPeer = new Peer(peerIceConfig);
+                clientPeer.on('open', () => {
+                    const hostPeerId = `matharena-v2-${code}`;
+                    clientConn = clientPeer.connect(hostPeerId, { reliable: true });
 
-                clientConn.on('open', () => {
-                    const playerData = { id: myPlayerId, name: name, score: 0 };
-                    clientConn.send({ type: 'PLAYER_JOIN', player: playerData });
+                    clientConn.on('open', () => {
+                        const playerData = { id: myPlayerId, name: name, score: 0 };
+                        clientConn.send({ type: 'PLAYER_JOIN', player: playerData });
+                    });
+
+                    clientConn.on('data', (data) => {
+                        if (data.type === 'ARENA_STATE_SYNC') {
+                            if (data.state?.kickedPlayers && data.state.kickedPlayers[myPlayerId]) {
+                                handleStudentKicked();
+                                return;
+                            }
+                            onArenaDataUpdated(data.state);
+                        } else if (data.type === 'ARENA_DISMISSED') {
+                            handleStudentArenaDismissed();
+                        } else if (data.type === 'PLAYER_KICKED' && data.playerId === myPlayerId) {
+                            handleStudentKicked();
+                        }
+                    });
+
+                    clientConn.on('error', () => {
+                        connectViaBroadcastOnly(code, name);
+                    });
                 });
 
-                clientConn.on('data', (data) => {
-                    if (data.type === 'ARENA_STATE_SYNC') {
-                        onArenaDataUpdated(data.state);
-                    } else if (data.type === 'ARENA_DISMISSED') {
-                        handleStudentArenaDismissed();
-                    }
-                });
-
-                clientConn.on('error', () => {
+                clientPeer.on('error', () => {
                     connectViaBroadcastOnly(code, name);
                 });
-            });
-
-            clientPeer.on('error', () => {
+            } catch (e) {
                 connectViaBroadcastOnly(code, name);
-            });
+            }
+        }
+
+        function handleStudentKicked() {
+            if (isTeacherHost) return;
+            if (compNextQTimer) clearTimeout(compNextQTimer);
+            if (countdownTimer) clearInterval(countdownTimer);
+            document.getElementById('comp-countdown-overlay').classList.add('hidden');
+            document.getElementById('comp-countdown-overlay').classList.remove('flex');
+            isCompAnswering = false;
+            stopCompSpeechRecognition();
+            if (arenaUnsubDoc) {
+                try { arenaUnsubDoc(); } catch(e) {}
+                arenaUnsubDoc = null;
+            }
+            if (clientConn) {
+                try { clientConn.close(); } catch(e) {}
+                clientConn = null;
+            }
+            if (clientPeer) {
+                try { clientPeer.destroy(); } catch(e) {}
+                clientPeer = null;
+            }
+            // 重新指派新的玩家 ID，確保學生重新登入時不被舊踢除紀錄攔截
+            myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
+            currentArenaId = null;
+            arenaState = null;
+            showToast("您已被老師移出擂台名單，若要參賽請重新登入！", false);
+            showCompHomeView();
         }
 
         function handleStudentArenaDismissed() {
             if (isTeacherHost) return;
             if (compNextQTimer) clearTimeout(compNextQTimer);
+            if (countdownTimer) clearInterval(countdownTimer);
+            document.getElementById('comp-countdown-overlay').classList.add('hidden');
+            document.getElementById('comp-countdown-overlay').classList.remove('flex');
             isCompAnswering = false;
             stopCompSpeechRecognition();
             if (arenaUnsubDoc) {
@@ -2640,11 +3056,55 @@
                 } else if (!isTeacherHost) {
                     if (msg.type === 'ARENA_DISMISSED' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleStudentArenaDismissed();
+                    } else if (msg.type === 'PLAYER_KICKED' && msg.playerId === myPlayerId && (!msg.arenaId || msg.arenaId === currentArenaId)) {
+                        handleStudentKicked();
                     } else if (msg.type === 'ARENA_STATE_SYNC' && msg.state && msg.state.id === currentArenaId) {
+                        if (msg.state.kickedPlayers && msg.state.kickedPlayers[myPlayerId]) {
+                            handleStudentKicked();
+                            return;
+                        }
                         onArenaDataUpdated(msg.state);
                     }
                 }
             };
+        }
+
+        function triggerSyncCountdown(roundNum, onComplete) {
+            if (currentCountdownRound === roundNum) return;
+            currentCountdownRound = roundNum;
+
+            if (countdownTimer) clearInterval(countdownTimer);
+            const overlay = document.getElementById('comp-countdown-overlay');
+            const numEl = document.getElementById('comp-countdown-number');
+            if (!overlay || !numEl) {
+                if (onComplete) onComplete();
+                return;
+            }
+
+            let count = 3;
+            numEl.innerText = count;
+            numEl.className = "text-8xl md:text-9xl font-black text-white drop-shadow-[0_0_30px_rgba(251,191,36,0.9)] transition-transform duration-300 scale-110";
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+
+            countdownTimer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    numEl.innerText = count;
+                    numEl.classList.remove('scale-110');
+                    void numEl.offsetWidth; // 觸發動畫重繪
+                    numEl.classList.add('scale-110');
+                } else if (count === 0) {
+                    numEl.innerText = 'GO!';
+                    numEl.className = "text-7xl md:text-9xl font-black text-emerald-400 drop-shadow-[0_0_35px_rgba(52,211,153,0.95)] transition-transform duration-300 scale-125";
+                } else {
+                    clearInterval(countdownTimer);
+                    countdownTimer = null;
+                    overlay.classList.add('hidden');
+                    overlay.classList.remove('flex');
+                    if (onComplete) onComplete();
+                }
+            }, 900);
         }
 
         function onArenaDataUpdated(data) {
@@ -2654,6 +3114,12 @@
             if (isTeacherHost) {
                 if (arenaState.status === 'waiting') {
                     renderLobbyPlayers(arenaState.players || {});
+                } else if (arenaState.status === 'countdown') {
+                    hideAllCompViews();
+                    document.getElementById('comp-teacher-monitor-view').classList.remove('hidden');
+                    document.getElementById('monitor-code').innerText = arenaState.id;
+                    document.getElementById('monitor-target').innerText = arenaState.targetScore;
+                    renderMonitorBoard(arenaState.players || {});
                 } else if (arenaState.status === 'playing') {
                     hideAllCompViews();
                     document.getElementById('comp-teacher-monitor-view').classList.remove('hidden');
@@ -2678,6 +3144,23 @@
                     spkBadge.innerText = arenaState.enableSpeech !== false ? '已開啟 (可口述答題)' : '已停用 (請用鍵盤)';
                     spkBadge.className = arenaState.enableSpeech !== false ? 'font-bold text-emerald-600' : 'font-bold text-red-600';
                 }
+            } else if (arenaState.status === 'countdown') {
+                // 學生進入 3-2-1 倒數準備階段
+                const roundNum = arenaState.round || 1;
+                hideAllCompViews();
+                document.getElementById('comp-student-play-view').classList.remove('hidden');
+                document.getElementById('student-play-name').innerText = myPlayerName;
+                document.getElementById('student-target-score').innerText = arenaState.targetScore;
+                document.getElementById('student-my-score').innerText = '0';
+                document.getElementById('student-progress-bar').style.width = '0%';
+                document.getElementById('comp-card-question').innerText = '準備中...';
+                
+                triggerSyncCountdown(roundNum, () => {
+                    if (arenaState && (arenaState.status === 'playing' || arenaState.status === 'countdown')) {
+                        arenaState.status = 'playing';
+                        startStudentRoundPlay(roundNum);
+                    }
+                });
             } else if (arenaState.status === 'playing') {
                 hideAllCompViews();
                 document.getElementById('comp-student-play-view').classList.remove('hidden');
@@ -2686,28 +3169,42 @@
                 
                 setupCompSpeechUI(arenaState.enableSpeech !== false);
 
-                const isNewRound = (arenaState.round && arenaState.round > myCompRound);
+                const roundNum = arenaState.round || 1;
+                const isNewRound = (roundNum > myCompRound);
                 const isRestartFromEnded = (previousStatus === 'ended');
-                
-                if (isNewRound || isRestartFromEnded || !compCurrentQ) {
-                    if (compNextQTimer) clearTimeout(compNextQTimer);
-                    myCompRound = arenaState.round || 1;
-                    myCurrentScore = 0;
-                    document.getElementById('student-my-score').innerText = '0';
-                    document.getElementById('student-progress-bar').style.width = '0%';
-                    document.getElementById('comp-manual-input').value = '';
-                    compCurrentQ = null;
-                    isCompAnswering = false;
-                    document.getElementById('comp-feedback-text').innerText = '答對 +1 分，答錯扣 1 分（最低 0 分）';
-                    compQuestionPool = buildQuestionsByMode(arenaState.topic, arenaState.mode);
-                    nextCompQuestion();
+
+                // 若剛直接收到 playing 且尚未跑過該回合倒數，也補跑一次倒數後開題
+                if (currentCountdownRound !== roundNum && (isNewRound || isRestartFromEnded || !compCurrentQ)) {
+                    triggerSyncCountdown(roundNum, () => {
+                        startStudentRoundPlay(roundNum);
+                    });
+                } else if (isNewRound || isRestartFromEnded || !compCurrentQ) {
+                    startStudentRoundPlay(roundNum);
                 }
             } else if (arenaState.status === 'ended') {
                 if (compNextQTimer) clearTimeout(compNextQTimer);
+                if (countdownTimer) clearInterval(countdownTimer);
+                document.getElementById('comp-countdown-overlay').classList.add('hidden');
+                document.getElementById('comp-countdown-overlay').classList.remove('flex');
                 isCompAnswering = false;
                 stopCompSpeechRecognition();
                 renderPodiumAndResults(arenaState);
             }
+        }
+
+        function startStudentRoundPlay(roundNum) {
+            if (compNextQTimer) clearTimeout(compNextQTimer);
+            myCompRound = roundNum;
+            myCurrentScore = 0;
+            document.getElementById('student-my-score').innerText = '0';
+            document.getElementById('student-progress-bar').style.width = '0%';
+            document.getElementById('comp-manual-input').value = '';
+            compCurrentQ = null;
+            isCompAnswering = false;
+            document.getElementById('comp-feedback-text').innerText = '答對 +1 分，答錯扣 1 分（最低 0 分）';
+            setupCompSpeechUI(arenaState.enableSpeech !== false);
+            compQuestionPool = buildQuestionsByMode(arenaState.topic, arenaState.mode);
+            nextCompQuestion();
         }
 
         function setupCompSpeechUI(isAllowed) {
@@ -2957,96 +3454,105 @@
             }
 
             listContainer.innerHTML = pArray.map((p, idx) => `
-                <div class="flex items-center justify-between p-2 bg-indigo-50/50 rounded-xl">
+                <div class="flex items-center justify-between p-2 bg-indigo-50/50 rounded-xl hover:bg-indigo-50 transition">
                     <span class="font-bold text-gray-700">${idx + 1}. ${p.name}</span>
-                    <span class="text-[11px] text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> 已就緒</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> 已就緒</span>
+                        <button onclick="kickLobbyPlayer('${p.id}')" title="移除此選手並斷開連線" class="w-6 h-6 rounded-lg bg-rose-100 hover:bg-rose-500 text-rose-600 hover:text-white flex items-center justify-center transition shadow-sm">
+                            <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
         }
 
-        function startArenaMatch() {
-            if (!arenaState || !isTeacherHost) return;
-            const pCount = Object.keys(arenaState.players || {}).length;
-            if (pCount === 0) {
-                showToast("目前尚無選手加入擂台！請等待學生加入或開啟測試分頁", false);
+        async function kickLobbyPlayer(playerId) {
+            if (!arenaState || !isTeacherHost || !playerId) return;
+            const player = arenaState.players ? arenaState.players[playerId] : null;
+            const playerName = player ? player.name : '該學生';
+
+            if (arenaState.players && arenaState.players[playerId]) {
+                delete arenaState.players[playerId];
+            }
+            if (!arenaState.kickedPlayers) arenaState.kickedPlayers = {};
+            arenaState.kickedPlayers[playerId] = true;
+
+            renderLobbyPlayers(arenaState.players || {});
+
+            // 透過 WebRTC、BroadcastChannel 與 Firestore 通知目標學生端斷線退出
+            broadcastToAllStudents({ type: 'PLAYER_KICKED', arenaId: currentArenaId, playerId: playerId });
+            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+
+            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+                try {
+                    const { doc, deleteDoc, setDoc } = window.fbModules;
+                    const pDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId, 'players', playerId);
+                    await deleteDoc(pDocRef);
+                    const aDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
+                    await setDoc(aDocRef, { kickedPlayers: arenaState.kickedPlayers }, { merge: true });
+                } catch(e) {
+                    console.warn("Firestore 移除選手同步提示:", e);
+                }
             }
 
-            arenaState.status = 'playing';
-            arenaState.round = 1;
-            arenaState.winner = null;
+            showToast(`已移除選手「${playerName}」並中斷其連線`, true);
+        }
+
+        function startArenaMatch() {
+            if (!arenaState || !isTeacherHost) return;
+            const roundNum = arenaState.round || 1;
 
             if (arenaState.players) {
                 Object.keys(arenaState.players).forEach(pId => {
                     arenaState.players[pId].score = 0;
-                    arenaState.players[pId].round = 1;
-                    arenaState.players[pId].updatedAt = new Date().toISOString();
+                    arenaState.players[pId].round = roundNum;
                 });
             }
 
+            arenaState.status = 'countdown';
+            arenaState.winner = null;
+
             broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
             onArenaDataUpdated(arenaState);
-            showToast("比賽開始！全員同步開戰中！", true);
+
+            triggerSyncCountdown(roundNum, () => {
+                if (!arenaState || !isTeacherHost) return;
+                arenaState.status = 'playing';
+                broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                onArenaDataUpdated(arenaState);
+                showToast("比賽正式開始！", true);
+            });
+        }
+
+        function openTestStudentTab() {
+            if (!currentArenaId) return;
+            const url = window.location.href.split('?')[0] + '?arena=' + currentArenaId;
+            window.open(url, '_blank');
         }
 
         async function dismissArena() {
-            if (!isTeacherHost) return;
-            const targetCode = currentArenaId;
-
-            broadcastToAllStudents({ type: 'ARENA_DISMISSED', arenaId: targetCode });
-
-            if (hostPeer) {
-                try { hostPeer.destroy(); } catch(e) {}
-                hostPeer = null;
-            }
-            if (arenaUnsubPlayers) {
-                try { arenaUnsubPlayers(); } catch(e) {}
-                arenaUnsubPlayers = null;
-            }
-            if (isFbReady && fbDb && window.fbModules && targetCode) {
-                try {
-                    const { doc, setDoc, deleteDoc } = window.fbModules;
-                    const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', targetCode);
-                    await setDoc(aRef, { status: 'dismissed' }, { merge: true });
-                    setTimeout(() => {
-                        deleteDoc(aRef).catch(() => {});
-                    }, 1000);
-                } catch(e) {}
-            }
-
-            currentArenaId = null;
-            arenaState = null;
-            showToast("擂台已解散", true);
-            showCompHomeView();
-        }
-
-        function renderMonitorBoard(players) {
-            const container = document.getElementById('monitor-player-board');
-            const pArray = Object.values(players || {}).sort((a, b) => (b.score || 0) - (a.score || 0));
-
-            if (pArray.length === 0) {
-                container.innerHTML = `<div class="text-gray-400 text-center py-4 text-xs">尚無選手連線數據</div>`;
+            if (!arenaState || !isTeacherHost) {
+                showCompHomeView();
                 return;
             }
+            arenaState.status = 'dismissed';
+            broadcastToAllStudents({ type: 'ARENA_DISMISSED', arenaId: currentArenaId });
+            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
 
-            const target = arenaState.targetScore || 5;
-
-            container.innerHTML = pArray.map((p, idx) => {
-                const score = p.score || 0;
-                const pct = Math.min(100, Math.round((score / target) * 100));
-                return `
-                    <div class="bg-white p-2.5 rounded-xl border shadow-sm space-y-1 text-xs">
-                        <div class="flex justify-between items-center font-bold">
-                            <span class="text-gray-800">${idx + 1}. ${p.name}</span>
-                            <span class="${isScoreHidden ? 'text-gray-400 italic' : 'text-indigo-600'}">
-                                ${isScoreHidden ? '比分隱藏中' : `${score} / ${target} 題`}
-                            </span>
-                        </div>
-                        <div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
-                            <div class="bg-indigo-600 h-full transition-all duration-300" style="width: ${isScoreHidden ? '50%' : `${pct}%`}"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+            if (arenaUnsubPlayers) {
+                try { arenaUnsubPlayers(); } catch (e) {}
+                arenaUnsubPlayers = null;
+            }
+            if (hostPeer) {
+                try { hostPeer.destroy(); } catch (e) {}
+                hostPeer = null;
+            }
+            connectedClients = {};
+            currentArenaId = null;
+            arenaState = null;
+            isTeacherHost = false;
+            showToast("已解散擂台並通知所有連線選手", true);
+            showCompHomeView();
         }
 
         function toggleScoreVisibility() {
@@ -3054,23 +3560,50 @@
             const btn = document.getElementById('hide-score-toggle-btn');
             if (isScoreHidden) {
                 btn.innerHTML = `<i class="fa-solid fa-eye"></i> 顯示選手比分`;
-                btn.className = "px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow transition flex items-center gap-1.5";
+                btn.className = "px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl border border-amber-300 shadow-sm transition flex items-center gap-1.5";
             } else {
                 btn.innerHTML = `<i class="fa-solid fa-eye-slash"></i> 隱藏選手比分 (防干擾)`;
                 btn.className = "px-3 py-1 bg-white hover:bg-gray-100 text-gray-700 text-xs font-bold rounded-xl border shadow-sm transition flex items-center gap-1.5";
             }
-            if (arenaState && arenaState.players) {
-                renderMonitorBoard(arenaState.players);
+            if (arenaState) renderMonitorBoard(arenaState.players || {});
+        }
+
+        function renderMonitorBoard(players) {
+            const board = document.getElementById('monitor-player-board');
+            if (!board) return;
+            const pArray = Object.values(players || {}).sort((a, b) => (b.score || 0) - (a.score || 0));
+            const target = arenaState?.targetScore || 5;
+
+            if (pArray.length === 0) {
+                board.innerHTML = `<div class="text-center text-xs text-gray-400 py-6">目前尚無參賽選手</div>`;
+                return;
             }
+
+            board.innerHTML = pArray.map((p, idx) => {
+                const score = p.score || 0;
+                const pct = Math.min(100, Math.round((score / target) * 100));
+                return `
+                    <div class="bg-white p-2.5 rounded-xl border shadow-sm space-y-1.5">
+                        <div class="flex justify-between items-center text-xs font-bold">
+                            <span class="text-gray-800">${idx + 1}. ${p.name}</span>
+                            <span class="text-indigo-600 font-black">${isScoreHidden ? '🔒 隱藏中' : `${score} / ${target} 分`}</span>
+                        </div>
+                        <div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                            <div class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full transition-all duration-300" style="width: ${isScoreHidden ? 0 : pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function endArenaMatchEarly() {
             if (!arenaState || !isTeacherHost) return;
-            arenaState.status = 'ended';
             const pArray = Object.values(arenaState.players || {}).sort((a, b) => (b.score || 0) - (a.score || 0));
-            arenaState.winner = pArray[0] || { name: '無獲勝者', score: 0 };
+            arenaState.status = 'ended';
+            arenaState.winner = pArray[0] || { name: '無人達標', score: 0 };
             broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
             onArenaDataUpdated(arenaState);
+            showToast("已手動結束本場比賽！", true);
         }
 
         function renderPodiumAndResults(state) {
@@ -3078,51 +3611,49 @@
             document.getElementById('comp-result-view').classList.remove('hidden');
 
             const pArray = Object.values(state.players || {}).sort((a, b) => (b.score || 0) - (a.score || 0));
-            const winner = state.winner || pArray[0] || { name: '爭霸冠軍', score: 0 };
+            const rank1 = state.winner || pArray[0] || { name: '從缺', score: 0 };
+            const rank2 = pArray.find(p => p.id !== rank1.id) || pArray[1] || { name: '從缺', score: 0 };
+            const rank3 = pArray.find(p => p.id !== rank1.id && p.id !== rank2.id) || pArray[2] || { name: '從缺', score: 0 };
 
-            document.getElementById('podium-winner-name').innerText = winner.name;
+            document.getElementById('podium-winner-name').innerText = rank1.name || '---';
+            document.getElementById('podium-rank1-name').innerText = rank1.name || '--';
+            document.getElementById('podium-rank1-score').innerText = `${rank1.score || 0} 分`;
+            document.getElementById('podium-rank2-name').innerText = rank2.name || '--';
+            document.getElementById('podium-rank2-score').innerText = `${rank2.score || 0} 分`;
+            document.getElementById('podium-rank3-name').innerText = rank3.name || '--';
+            document.getElementById('podium-rank3-score').innerText = `${rank3.score || 0} 分`;
 
-            const p1 = pArray[0] || { name: '從缺', score: 0 };
-            const p2 = pArray[1] || { name: '從缺', score: 0 };
-            const p3 = pArray[2] || { name: '從缺', score: 0 };
-
-            document.getElementById('podium-rank1-name').innerText = p1.name;
-            document.getElementById('podium-rank1-score').innerText = `${p1.score || 0} 分`;
-
-            document.getElementById('podium-rank2-name').innerText = p2.name;
-            document.getElementById('podium-rank2-score').innerText = `${p2.score || 0} 分`;
-
-            document.getElementById('podium-rank3-name').innerText = p3.name;
-            document.getElementById('podium-rank3-score').innerText = `${p3.score || 0} 分`;
-
-            const listContainer = document.getElementById('arena-leaderboard-list');
-            listContainer.innerHTML = pArray.map((p, idx) => `
-                <div class="flex items-center justify-between p-2 rounded-xl ${idx === 0 ? 'bg-amber-100/70 font-extrabold text-amber-900' : 'bg-white'}">
-                    <span>第 ${idx + 1} 名 · ${p.name}</span>
-                    <span class="font-black text-indigo-600">${p.score || 0} 分</span>
-                </div>
-            `).join('');
+            const lbList = document.getElementById('arena-leaderboard-list');
+            if (pArray.length === 0) {
+                lbList.innerHTML = `<div class="text-center text-gray-400 py-3">無參賽選手資料</div>`;
+            } else {
+                lbList.innerHTML = pArray.map((p, idx) => `
+                    <div class="flex items-center justify-between p-2 bg-white rounded-xl border">
+                        <span class="font-bold text-gray-700">第 ${idx + 1} 名 · ${p.name}</span>
+                        <span class="font-black text-indigo-600">${p.score || 0} 分</span>
+                    </div>
+                `).join('');
+            }
 
             const rematchBtn = document.getElementById('arena-rematch-btn');
             const studentNotice = document.getElementById('student-rematch-waiting-notice');
             if (isTeacherHost) {
                 rematchBtn.classList.remove('hidden');
-                if (studentNotice) studentNotice.classList.add('hidden');
+                studentNotice.classList.add('hidden');
             } else {
                 rematchBtn.classList.add('hidden');
-                if (studentNotice) studentNotice.classList.remove('hidden');
+                studentNotice.classList.remove('hidden');
             }
         }
 
         function openRematchModal() {
-            if (!arenaState) return;
+            if (!arenaState || !isTeacherHost) return;
             document.getElementById('rematch-modal-code').innerText = arenaState.id;
             document.getElementById('rematch-topic-select').value = arenaState.topic || 'multiply';
             updateRematchModeOptions();
-            document.getElementById('rematch-mode-select').value = arenaState.mode || 'mul-9x9-standard';
-            document.getElementById('rematch-target-select').value = arenaState.targetScore || '5';
+            document.getElementById('rematch-mode-select').value = arenaState.mode;
             document.getElementById('rematch-enable-speech').checked = arenaState.enableSpeech !== false;
-            
+
             const modal = document.getElementById('rematch-modal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
@@ -3155,9 +3686,12 @@
             const newTarget = parseInt(document.getElementById('rematch-target-select').value, 10) || 5;
             const enableSpeech = document.getElementById('rematch-enable-speech').checked;
 
+            const nextRound = (arenaState.round || 1) + 1;
+
             if (arenaState.players) {
                 Object.keys(arenaState.players).forEach(pId => {
                     arenaState.players[pId].score = 0;
+                    arenaState.players[pId].round = nextRound;
                 });
             }
 
@@ -3166,308 +3700,22 @@
             arenaState.modeName = newModeName;
             arenaState.targetScore = newTarget;
             arenaState.enableSpeech = enableSpeech;
-            arenaState.status = 'playing';
+            arenaState.status = 'countdown';
             arenaState.winner = null;
-            arenaState.round = (arenaState.round || 1) + 1;
+            arenaState.round = nextRound;
 
             compQuestionPool = buildQuestionsByMode(newTopic, newMode);
 
             closeRematchModal();
             broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
             onArenaDataUpdated(arenaState);
-            showToast(`第 ${arenaState.round} 局開戰！全員分數已歸零！`, true);
-        }
 
-        function openTestStudentTab() {
-            if (!currentArenaId) return;
-            const url = window.location.href.split('?')[0] + '?arena=' + currentArenaId;
-            window.open(url, '_blank');
-        }
-
-        function checkUrlArenaParams() {
-            const params = new URLSearchParams(window.location.search);
-            const arenaCode = params.get('arena');
-            if (arenaCode) {
-                switchMainTab('comp');
-                showJoinArenaView();
-                document.getElementById('join-arena-code').value = arenaCode;
-            }
-        }
-
-        function toggleStudentLogin() {
-            if (!currentStudent.isGuest) {
-                currentStudent = { name: '訪客選手', email: null, isGuest: true };
-                document.getElementById('current-user-name').innerText = currentStudent.name;
-                document.getElementById('auth-action-btn').innerHTML = `<i class="fa-brands fa-google text-xs"></i> 登入`;
-                showToast("已登出 Google 帳號", true);
-            } else {
-                document.getElementById('student-login-modal').classList.remove('hidden');
-                document.getElementById('student-login-modal').classList.add('flex');
-            }
-        }
-
-        function closeStudentLoginModal() {
-            document.getElementById('student-login-modal').classList.add('hidden');
-            document.getElementById('student-login-modal').classList.remove('flex');
-        }
-
-        function confirmStudentLogin() {
-            const name = document.getElementById('login-student-name').value.trim();
-            const email = document.getElementById('login-student-email').value.trim();
-            if (!name || !email) {
-                showToast("請輸入姓名與 Google 信箱！", false);
-                return;
-            }
-
-            currentStudent = { name: name, email: email, isGuest: false };
-            document.getElementById('current-user-name').innerText = name;
-            document.getElementById('auth-action-btn').innerHTML = `<i class="fa-solid fa-arrow-right-from-bracket"></i> 登出`;
-            closeStudentLoginModal();
-            showToast(`歡迎回來，${name}！`, true);
-        }
-
-        function promptTeacherLogin() {
-            document.getElementById('teacher-pwd-input').value = '';
-            document.getElementById('teacher-auth-modal').classList.remove('hidden');
-            document.getElementById('teacher-auth-modal').classList.add('flex');
-        }
-
-        function closeTeacherAuthModal() {
-            document.getElementById('teacher-auth-modal').classList.add('hidden');
-            document.getElementById('teacher-auth-modal').classList.remove('flex');
-        }
-
-        function verifyTeacherPassword() {
-            const pwd = document.getElementById('teacher-pwd-input').value;
-            if (pwd === 'Rccbok6869') {
-                closeTeacherAuthModal();
-                openTeacherDashboard();
-            } else {
-                showToast("密碼錯誤，請重新確認！", false);
-                document.getElementById('teacher-pwd-input').value = '';
-            }
-        }
-
-        function openTeacherDashboard() {
-            document.getElementById('interactive-section').classList.add('hidden');
-            document.getElementById('worksheet-section').classList.add('hidden');
-            document.getElementById('comp-section').classList.add('hidden');
-
-            document.getElementById('teacher-section').classList.remove('hidden');
-            document.getElementById('app-subtitle').innerText = "教師專用管理後台：設定學生授權名單並分析歷次測驗成效";
-
-            renderRosterTable();
-            renderScoreFilterOptions();
-            renderScoresTable();
-        }
-
-        function closeTeacherDashboard() {
-            document.getElementById('teacher-section').classList.add('hidden');
-            switchMainTab(activeTab || 'interactive');
-        }
-
-        function switchTeacherSubTab(sub) {
-            const btnRoster = document.getElementById('subtab-btn-roster');
-            const btnScores = document.getElementById('subtab-btn-scores');
-            const btnFb = document.getElementById('subtab-btn-fbconfig');
-            const viewRoster = document.getElementById('teacher-roster-subview');
-            const viewScores = document.getElementById('teacher-scores-subview');
-            const viewFb = document.getElementById('teacher-fbconfig-subview');
-
-            btnRoster.className = "pb-2 text-gray-500 hover:text-indigo-600";
-            btnScores.className = "pb-2 text-gray-500 hover:text-indigo-600";
-            btnFb.className = "pb-2 text-gray-500 hover:text-indigo-600";
-
-            viewRoster.classList.add('hidden');
-            viewScores.classList.add('hidden');
-            viewFb.classList.add('hidden');
-
-            if (sub === 'roster') {
-                btnRoster.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
-                viewRoster.classList.remove('hidden');
-            } else if (sub === 'scores') {
-                btnScores.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
-                viewScores.classList.remove('hidden');
-                renderScoreFilterOptions();
-                renderScoresTable();
-            } else if (sub === 'fbconfig') {
-                btnFb.className = "pb-2 border-b-2 border-indigo-600 text-indigo-600";
-                viewFb.classList.remove('hidden');
-                const saved = localStorage.getItem('custom_firebase_config') || '';
-                document.getElementById('custom-fb-config-input').value = saved;
-            }
-        }
-
-        function renderRosterTable() {
-            const tbody = document.getElementById('roster-table-body');
-            document.getElementById('roster-count').innerText = rosterList.length;
-
-            if (rosterList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-400">目前尚無授權學生資料</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = rosterList.map((st, idx) => `
-                <tr class="hover:bg-gray-50">
-                    <td class="p-2.5 text-gray-400">${idx + 1}</td>
-                    <td class="p-2.5 font-bold text-gray-800">${st.name}</td>
-                    <td class="p-2.5 text-indigo-600 font-semibold">${st.email}</td>
-                    <td class="p-2.5 text-center">
-                        <button onclick="removeStudentFromRoster(${idx})" class="text-rose-500 hover:text-rose-700 font-bold text-[11px]">刪除</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function addStudentToRoster() {
-            const name = document.getElementById('roster-name-input').value.trim();
-            const email = document.getElementById('roster-email-input').value.trim();
-            if (!name || !email) {
-                showToast("請輸入姓名與信箱！", false);
-                return;
-            }
-
-            const id = 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-            rosterList.push({ id, name, email });
-            document.getElementById('roster-name-input').value = '';
-            document.getElementById('roster-email-input').value = '';
-            syncRosterChange();
-            showToast("學生建檔成功並已同步！", true);
-        }
-
-        async function removeStudentFromRoster(idx) {
-            const target = rosterList[idx];
-            if (!target) return;
-
-            if (isFbReady && fbDb && target.id && window.fbModules) {
-                const { doc, deleteDoc } = window.fbModules;
-                try {
-                    await deleteDoc(doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'roster', target.id));
-                } catch(e) {}
-            }
-
-            rosterList.splice(idx, 1);
-            syncRosterChange();
-            showToast("已從名冊移除該學生並同步", true);
-        }
-
-        function exportRosterCSV() {
-            if (rosterList.length === 0) {
-                showToast("名冊目前為空，無法匯出！", false);
-                return;
-            }
-
-            let csvContent = "\uFEFF序號,學生姓名,Google信箱\n";
-            rosterList.forEach((st, idx) => {
-                const safeName = `"${(st.name || '').replace(/"/g, '""')}"`;
-                const safeEmail = `"${(st.email || '').replace(/"/g, '""')}"`;
-                csvContent += `${idx + 1},${safeName},${safeEmail}\n`;
-            });
-
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", `數學挑戰王_學生名冊_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            showToast("學生名冊 CSV 匯出完成！", true);
-        }
-
-        function downloadRosterTemplate() {
-            const csvContent = "\uFEFF序號,學生姓名,Google信箱\n1,林小華,student1@gmail.com\n2,陳大明,student2@gmail.com\n3,王小美,student3@gmail.com\n";
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", `名冊匯入範本.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            showToast("已下載名冊格式範本", true);
-        }
-
-        function triggerImportCSV() {
-            const input = document.getElementById('roster-file-input');
-            if (input) {
-                input.value = '';
-                input.click();
-            }
-        }
-
-        function handleRosterFileImport(event) {
-            const file = event.target.files && event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const content = e.target.result;
-                    let count = 0;
-
-                    if (file.name.endsWith('.json')) {
-                        const parsed = JSON.parse(content);
-                        if (Array.isArray(parsed)) {
-                            parsed.forEach(item => {
-                                if (item.name && item.email) {
-                                    rosterList.push({
-                                        id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                                        name: String(item.name).trim(),
-                                        email: String(item.email).trim()
-                                    });
-                                    count++;
-                                }
-                            });
-                        }
-                    } else {
-                        const lines = content.split(/\r\n|\n/);
-                        lines.forEach((line, index) => {
-                            if (!line.trim() || index === 0) return;
-                            const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
-                            let name = '', email = '';
-                            if (parts.length >= 3) {
-                                name = parts[1];
-                                email = parts[2];
-                            } else if (parts.length === 2) {
-                                name = parts[0];
-                                email = parts[1];
-                            }
-                            if (name && email && email.includes('@')) {
-                                rosterList.push({
-                                    id: 'st_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-                                    name,
-                                    email
-                                });
-                                count++;
-                            }
-                        });
-                    }
-
-                    if (count > 0) {
-                        syncRosterChange();
-                        showToast(`成功匯入 ${count} 位學生，並已即時同步！`, true);
-                    } else {
-                        showToast("未能解析到有效學生資料，請確認檔案格式！", false);
-                    }
-                } catch(err) {
-                    showToast("檔案讀取或解析失敗！", false);
-                    console.error("名冊匯入失敗:", err);
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function renderScoreFilterOptions() {
-            const select = document.getElementById('score-filter-student');
-            select.innerHTML = '<option value="ALL">全部學生</option>';
-            rosterList.forEach(st => {
-                const opt = document.createElement('option');
-                opt.value = st.name;
-                opt.innerText = st.name;
-                select.appendChild(opt);
+            triggerSyncCountdown(nextRound, () => {
+                if (!arenaState || !isTeacherHost) return;
+                arenaState.status = 'playing';
+                broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                onArenaDataUpdated(arenaState);
+                showToast(`第 ${nextRound} 局正式開戰！全員分數已歸零！`, true);
             });
         }
 
