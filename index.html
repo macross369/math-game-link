@@ -17,11 +17,11 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, deleteField, onSnapshot, getDocs, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.fbModules = {
             initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
-            getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, updateDoc, getDoc
+            getFirestore, collection, doc, setDoc, deleteDoc, deleteField, onSnapshot, getDocs, updateDoc, getDoc
         };
         if (window.initFirebaseSync) {
             window.initFirebaseSync();
@@ -1051,6 +1051,8 @@
         let arenaUnsubDoc = null; // Firestore 房間即時監聽清理器
         let arenaUnsubPlayers = null; // Firestore 選手即時監聽清理器
         let arenaUnsubMyPlayer = null; // Firestore 個人選手狀態監聽清理器
+        let kickCheckInterval = null; // 學生端被移除狀態主動巡檢計時器
+        let hasStudentRegisteredInRoom = false; // 標記學生是否已成功在名單上註冊
         let countdownTimer = null; // 3-2-1 倒數計時器
         let currentCountdownRound = 0; // 避免同回合重複觸發倒數
 
@@ -2912,6 +2914,12 @@
             myPlayerName = name;
             myCurrentScore = 0;
             isTeacherHost = false;
+            hasStudentRegisteredInRoom = false;
+
+            if (kickCheckInterval) {
+                clearInterval(kickCheckInterval);
+                kickCheckInterval = null;
+            }
 
             showToast("正在連線擂台，請稍候...", true);
 
@@ -2926,9 +2934,6 @@
                         if (arenaData.status === 'dismissed') {
                             showToast("該擂台已被解散！", false);
                             return;
-                        }
-                        if (arenaData.kickedPlayers && arenaData.kickedPlayers[myPlayerId]) {
-                            delete arenaData.kickedPlayers[myPlayerId];
                         }
 
                         const pRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players', myPlayerId);
@@ -2953,6 +2958,12 @@
                                 handleStudentKicked();
                                 return;
                             }
+                            if (latestData.players && latestData.players[myPlayerId]) {
+                                hasStudentRegisteredInRoom = true;
+                            } else if (hasStudentRegisteredInRoom && latestData.players && !latestData.players[myPlayerId]) {
+                                handleStudentKicked();
+                                return;
+                            }
                             onArenaDataUpdated(latestData);
                         }, (err) => {
                             console.warn("Firestore 房間監聽提示:", err);
@@ -2970,6 +2981,30 @@
                         }, (err) => {
                             console.warn("Firestore 個人選手監聽提示:", err);
                         });
+
+                        // 啟動每 2 秒主動巡檢防護，確保任何網路延遲或快取情況下被踢除都能準確退回首頁
+                        kickCheckInterval = setInterval(async () => {
+                            if (isTeacherHost || !currentArenaId) {
+                                clearInterval(kickCheckInterval);
+                                return;
+                            }
+                            try {
+                                const latestArenaSnap = await getDoc(arenaDocRef);
+                                if (!latestArenaSnap.exists() || latestArenaSnap.data().status === 'dismissed') {
+                                    handleStudentArenaDismissed();
+                                    return;
+                                }
+                                const aData = latestArenaSnap.data();
+                                if (aData.kickedPlayers && aData.kickedPlayers[myPlayerId]) {
+                                    handleStudentKicked();
+                                    return;
+                                }
+                                const myPSnap = await getDoc(pRef);
+                                if (hasConfirmedJoined && !myPSnap.exists()) {
+                                    handleStudentKicked();
+                                }
+                            } catch (e) {}
+                        }, 2000);
 
                         showToast("已成功透過雲端通道連入擂台！", true);
                     }
@@ -3031,11 +3066,16 @@
 
         function handleStudentKicked() {
             if (isTeacherHost) return;
+            if (kickCheckInterval) {
+                clearInterval(kickCheckInterval);
+                kickCheckInterval = null;
+            }
             if (compNextQTimer) clearTimeout(compNextQTimer);
             if (countdownTimer) clearInterval(countdownTimer);
             document.getElementById('comp-countdown-overlay').classList.add('hidden');
             document.getElementById('comp-countdown-overlay').classList.remove('flex');
             isCompAnswering = false;
+            hasStudentRegisteredInRoom = false;
             stopCompSpeechRecognition();
             if (arenaUnsubDoc) {
                 try { arenaUnsubDoc(); } catch(e) {}
@@ -3063,11 +3103,16 @@
 
         function handleStudentArenaDismissed() {
             if (isTeacherHost) return;
+            if (kickCheckInterval) {
+                clearInterval(kickCheckInterval);
+                kickCheckInterval = null;
+            }
             if (compNextQTimer) clearTimeout(compNextQTimer);
             if (countdownTimer) clearInterval(countdownTimer);
             document.getElementById('comp-countdown-overlay').classList.add('hidden');
             document.getElementById('comp-countdown-overlay').classList.remove('flex');
             isCompAnswering = false;
+            hasStudentRegisteredInRoom = false;
             stopCompSpeechRecognition();
             if (arenaUnsubDoc) {
                 try { arenaUnsubDoc(); } catch(e) {}
@@ -3546,14 +3591,14 @@
 
             if (isFbReady && fbDb && window.fbModules && currentArenaId) {
                 try {
-                    const { doc, deleteDoc, setDoc } = window.fbModules;
+                    const { doc, deleteDoc, updateDoc, deleteField } = window.fbModules;
                     const pDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId, 'players', playerId);
                     await deleteDoc(pDocRef);
                     const aDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
-                    await setDoc(aDocRef, { 
-                        players: arenaState.players || {},
-                        kickedPlayers: arenaState.kickedPlayers 
-                    }, { merge: true });
+                    await updateDoc(aDocRef, { 
+                        [`players.${playerId}`]: deleteField(),
+                        [`kickedPlayers.${playerId}`]: true
+                    });
                 } catch(e) {
                     console.warn("Firestore 移除選手同步提示:", e);
                 }
