@@ -15,12 +15,12 @@
 
     <!-- 引入 Firebase SDK 模組 (支援跨載具即時通訊) -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, deleteField, onSnapshot, getDocs, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.fbModules = {
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken,
+            initializeApp, getApps, getApp, getAuth, signInAnonymously, signInWithCustomToken,
             getFirestore, collection, doc, setDoc, deleteDoc, deleteField, onSnapshot, getDocs, updateDoc, getDoc
         };
         if (window.initFirebaseSync) {
@@ -691,7 +691,10 @@
                     <div id="monitor-player-board" class="space-y-2.5 max-h-72 overflow-y-auto p-3 bg-gray-50 rounded-2xl border"></div>
                 </div>
 
-                <div class="flex justify-end">
+                <div class="flex justify-end gap-2">
+                    <button onclick="dismissArena()" class="py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-xs rounded-xl transition">
+                        關閉並解散擂台
+                    </button>
                     <button onclick="endArenaMatchEarly()" class="py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow transition">
                         手動中止本場比賽
                     </button>
@@ -749,7 +752,7 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <button onclick="showCompHomeView()" class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition">
+                    <button id="arena-leave-or-close-btn" onclick="leaveOrCloseArena()" class="py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-xs rounded-xl transition">
                         離開競賽擂台
                     </button>
                     <button id="arena-rematch-btn" onclick="openRematchModal()" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow transition hidden">
@@ -1081,6 +1084,7 @@
         // Firebase 與跨裝置即時同步狀態
         let fbApp = null, fbAuth = null, fbDb = null;
         let isFbReady = false;
+        let firebaseInitPromise = null;
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'math-challenge-champion';
 
         // 攔截沙盒環境 (如 Canvas 預覽) 對外部 PeerJS WebSocket 的安全性限制錯誤
@@ -1386,71 +1390,79 @@
         // ================== Firebase 跨網域同步引擎 ==================
         async function initFirebaseSync() {
             if (!window.fbModules) return;
-            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.fbModules;
-            try {
-                let cfg = null;
-                // 1. 檢查平台全域環境配置
-                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                    try { cfg = JSON.parse(__firebase_config); } catch(e) {}
-                }
-                // 2. 檢查 URL 參數中由 QR 碼攜帶的連線配置 (?fc=...)
-                if (!cfg) {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const fcParam = urlParams.get('fc');
-                    if (fcParam) {
+            if (isFbReady && fbDb) return;
+            if (firebaseInitPromise) return firebaseInitPromise;
+
+            firebaseInitPromise = (async () => {
+                const { initializeApp, getApps, getApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore } = window.fbModules;
+                try {
+                    let cfg = null;
+                    // 1. 檢查平台全域環境配置
+                    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                        try { cfg = JSON.parse(__firebase_config); } catch(e) {}
+                    }
+                    // 2. 檢查 URL 參數中由 QR 碼攜帶的連線配置 (?fc=...)
+                    if (!cfg) {
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const fcParam = urlParams.get('fc');
+                        if (fcParam) {
+                            try {
+                                const decoded = decodeURIComponent(atob(fcParam));
+                                cfg = JSON.parse(decoded);
+                                localStorage.setItem('custom_firebase_config', JSON.stringify(cfg));
+                            } catch(e) {}
+                        }
+                    }
+                    // 3. 檢查本地自訂設定
+                    if (!cfg) {
+                        const savedCfg = localStorage.getItem('custom_firebase_config');
+                        if (savedCfg) {
+                            try { cfg = JSON.parse(savedCfg); } catch(e) {}
+                        }
+                    }
+                    // 4. 若網站建置於 Firebase Hosting，自動載入專案原生設定 (/__/firebase/init.json)
+                    if (!cfg) {
                         try {
-                            const decoded = decodeURIComponent(atob(fcParam));
-                            cfg = JSON.parse(decoded);
-                            localStorage.setItem('custom_firebase_config', JSON.stringify(cfg));
+                            const fbInitResp = await fetch('/__/firebase/init.json');
+                            if (fbInitResp.ok) {
+                                cfg = await fbInitResp.json();
+                                console.log("✅ 成功從 Firebase Hosting 自動載入專案設定 /__/firebase/init.json");
+                            }
                         } catch(e) {}
                     }
-                }
-                // 3. 檢查本地自訂設定
-                if (!cfg) {
-                    const savedCfg = localStorage.getItem('custom_firebase_config');
-                    if (savedCfg) {
-                        try { cfg = JSON.parse(savedCfg); } catch(e) {}
-                    }
-                }
-                // 4. 若網站建置於 Firebase Hosting，自動載入專案原生設定 (/__/firebase/init.json)
-                if (!cfg) {
-                    try {
-                        const fbInitResp = await fetch('/__/firebase/init.json');
-                        if (fbInitResp.ok) {
-                            cfg = await fbInitResp.json();
-                            console.log("✅ 成功從 Firebase Hosting 自動載入專案設定 /__/firebase/init.json");
+
+                    if (cfg) {
+                        fbApp = (getApps && getApps().length > 0) ? getApp() : initializeApp(cfg);
+                        fbAuth = getAuth(fbApp);
+                        fbDb = getFirestore(fbApp);
+
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await signInWithCustomToken(fbAuth, __initial_auth_token);
+                            } else {
+                                await signInAnonymously(fbAuth);
+                            }
+                        } catch(authErr) {
+                            console.warn("Firebase 認證提示 (如未開啟匿名登入，將嘗試以公開規則直連):", authErr);
                         }
-                    } catch(e) {}
-                }
 
-                if (cfg) {
-                    fbApp = initializeApp(cfg);
-                    fbAuth = getAuth(fbApp);
-                    fbDb = getFirestore(fbApp);
-
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(fbAuth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(fbAuth);
-                        }
-                    } catch(authErr) {
-                        console.warn("Firebase 認證提示 (如未開啟匿名登入，將嘗試以公開規則直連):", authErr);
+                        isFbReady = true;
+                        bindFirestoreRealtimeListeners();
+                        bindBroadcastRealtimeListeners();
+                        updateFbStatusBadge(true);
+                    } else {
+                        console.info("未檢測到 Firebase 配置，切換為本地廣播與 WebRTC 即時同步通道");
+                        bindBroadcastRealtimeListeners();
+                        updateFbStatusBadge(false);
                     }
-
-                    isFbReady = true;
-                    bindFirestoreRealtimeListeners();
-                    updateFbStatusBadge(true);
-                } else {
-                    console.info("未檢測到 Firebase 配置，切換為本地廣播與 WebRTC 即時同步通道");
+                } catch (err) {
+                    console.warn("Firebase 初始化降級:", err);
                     bindBroadcastRealtimeListeners();
                     updateFbStatusBadge(false);
                 }
-            } catch (err) {
-                console.warn("Firebase 初始化降級:", err);
-                bindBroadcastRealtimeListeners();
-                updateFbStatusBadge(false);
-            }
+            })();
+
+            return firebaseInitPromise;
         }
         window.initFirebaseSync = initFirebaseSync;
 
@@ -1524,22 +1536,7 @@
         }
 
         function bindBroadcastRealtimeListeners() {
-            if (!broadcastChannel) return;
-            const originalOnMessage = broadcastChannel.onmessage;
-            broadcastChannel.onmessage = (event) => {
-                if (originalOnMessage) originalOnMessage(event);
-                const msg = event.data;
-                if (!msg) return;
-
-                if (msg.type === 'SYNC_ROSTER_UPDATE' && Array.isArray(msg.roster)) {
-                    rosterList = msg.roster;
-                    renderRosterTable();
-                    renderScoreFilterOptions();
-                } else if (msg.type === 'SYNC_SCORE_RECORD' && msg.record) {
-                    scoreHistory.unshift(msg.record);
-                    renderScoresTable();
-                }
-            };
+            initArenaBroadcastListener();
         }
 
         async function syncRosterChange() {
@@ -2328,30 +2325,80 @@
 
         function downloadPDF() {
             const element = document.getElementById('pdf-export-area');
-            const container = document.getElementById('wrong-list-container');
-            
-            const prevMaxHeight = container.style.maxHeight;
-            const prevOverflow = container.style.overflow;
-            
-            container.style.maxHeight = 'none';
-            container.style.overflow = 'visible';
+            showToast("正在產生 A4 置中錯題報告 PDF，請稍候...", true);
 
-            const opt = {
-                margin:       [10, 10, 15, 10],
-                filename:     `數學計算能力挑戰王_錯題記錄_${Date.now()}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true, logging: false },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
-            };
+            // 建立精準錨定於視窗左上角 (left:0, top:0) 的輸出容器，消除捲動偏移造成的上方留白與水平位移
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.left = '0';
+            overlay.style.top = '0';
+            overlay.style.width = '100vw';
+            overlay.style.height = '100vh';
+            overlay.style.backgroundColor = '#ffffff';
+            overlay.style.zIndex = '99999';
+            overlay.style.overflow = 'auto';
 
-            html2pdf().from(element).set(opt).save().then(() => {
-                container.style.maxHeight = prevMaxHeight;
-                container.style.overflow = prevOverflow;
-            }).catch((err) => {
-                container.style.maxHeight = prevMaxHeight;
-                container.style.overflow = prevOverflow;
-            });
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'relative';
+            wrapper.style.left = '0';
+            wrapper.style.top = '0';
+            wrapper.style.width = '680px';
+            wrapper.style.backgroundColor = '#ffffff';
+            wrapper.style.margin = '0';
+            wrapper.style.padding = '8px 16px';
+            wrapper.style.boxSizing = 'border-box';
+
+            const clone = element.cloneNode(true);
+            clone.style.width = '100%';
+            clone.style.maxWidth = '100%';
+            clone.style.margin = '0';
+
+            const cloneList = clone.querySelector('#wrong-list-container');
+            if (cloneList) {
+                cloneList.style.maxHeight = 'none';
+                cloneList.style.overflow = 'visible';
+            }
+
+            wrapper.appendChild(clone);
+            overlay.appendChild(wrapper);
+            document.body.appendChild(overlay);
+
+            setTimeout(() => {
+                // A4 寬度 210mm，左右各留 15mm 邊界，內容寬度精準對應 180mm (680px) 達到完美置中且頂端不留白
+                const fileName = `數學計算能力挑戰王_錯題記錄_${Date.now()}.pdf`;
+                const opt = {
+                    margin:       [10, 15, 12, 15],
+                    filename:     fileName,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { 
+                        scale: 2, 
+                        useCORS: true, 
+                        logging: false,
+                        x: 0,
+                        y: 0,
+                        scrollX: 0,
+                        scrollY: 0,
+                        width: 680,
+                        windowWidth: 680
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'], avoid: 'tr' }
+                };
+
+                html2pdf().from(wrapper).set(opt).toPdf().get('pdf').then((pdf) => {
+                    const totalPages = pdf.internal.getNumberOfPages();
+                    if (totalPages === 2 && wrapper.scrollHeight <= 1045) {
+                        pdf.deletePage(2);
+                    }
+                    pdf.save(fileName);
+                    if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                    showToast("錯題報告 PDF 下載完成！", true);
+                }).catch((err) => {
+                    console.error("錯題 PDF 匯出錯誤:", err);
+                    if (document.body.contains(overlay)) document.body.removeChild(overlay);
+                    showToast("PDF 匯出發生異常，請稍後再試", false);
+                });
+            }, 200);
         }
 
         function resetGame() {
@@ -2688,6 +2735,9 @@
         }
 
         async function createArenaSubmit() {
+            if (window.initFirebaseSync && !isFbReady) {
+                try { await window.initFirebaseSync(); } catch (e) {}
+            }
             const arenaName = document.getElementById('arena-name-input').value.trim() || '數學計算爭霸擂台';
             const topic = document.getElementById('arena-topic-select').value;
             const mode = document.getElementById('arena-mode-select').value;
@@ -2723,6 +2773,7 @@
                 status: 'waiting',
                 createdAt: new Date().toISOString(),
                 players: {},
+                kickedPlayers: {},
                 winner: null,
                 round: 1
             };
@@ -2741,17 +2792,25 @@
                     const playersCol = collection(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players');
                     if (arenaUnsubPlayers) arenaUnsubPlayers();
                     arenaUnsubPlayers = onSnapshot(playersCol, (snapshot) => {
+                        if (!arenaState || !isTeacherHost) return;
+                        let changed = false;
                         snapshot.docChanges().forEach((change) => {
                             const pData = change.doc.data();
-                            if (change.type === 'removed') {
-                                if (arenaState.players && pData && pData.id) {
-                                    delete arenaState.players[pData.id];
+                            const docId = change.doc.id;
+                            if (change.type === 'removed' || (pData && pData.kicked)) {
+                                if (arenaState.players && arenaState.players[docId]) {
+                                    delete arenaState.players[docId];
+                                    changed = true;
                                 }
                                 return;
                             }
-                            if (pData) {
+                            if (pData && pData.id) {
+                                if (arenaState.kickedPlayers && arenaState.kickedPlayers[pData.id]) {
+                                    return;
+                                }
                                 if (!arenaState.players) arenaState.players = {};
                                 arenaState.players[pData.id] = pData;
+                                changed = true;
 
                                 if (arenaState.status === 'playing' && pData.score >= arenaState.targetScore) {
                                     handleHostReceivedData({
@@ -2762,6 +2821,9 @@
                                 }
                             }
                         });
+                        if (changed) {
+                            setDoc(arenaDocRef, { players: arenaState.players }, { merge: true }).catch(() => {});
+                        }
                         onArenaDataUpdated(arenaState);
                     }, (err) => {
                         console.warn("Firestore 選手監聽提示:", err);
@@ -2821,12 +2883,19 @@
                 hostPeer = new Peer(peerId, peerIceConfig);
 
                 hostPeer.on('connection', (conn) => {
+                    connectedClients[conn.peer] = conn;
                     conn.on('open', () => {
                         connectedClients[conn.peer] = conn;
-                        conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState });
+                        if (arenaState) {
+                            try { conn.send({ type: 'ARENA_STATE_SYNC', state: arenaState }); } catch(e) {}
+                        }
                     });
 
                     conn.on('data', (data) => {
+                        connectedClients[conn.peer] = conn;
+                        if (data && data.player && data.player.id) {
+                            conn.playerId = data.player.id;
+                        }
                         handleHostReceivedData(data, conn);
                     });
 
@@ -2848,6 +2917,9 @@
 
             if (data.type === 'PLAYER_JOIN') {
                 const player = data.player;
+                if (arenaState.kickedPlayers && arenaState.kickedPlayers[player.id]) {
+                    delete arenaState.kickedPlayers[player.id];
+                }
                 if (!arenaState.players) arenaState.players = {};
                 arenaState.players[player.id] = player;
                 
@@ -2858,6 +2930,7 @@
                 if (arenaState.status !== 'playing') return;
 
                 const p = data.player;
+                if (arenaState.kickedPlayers && arenaState.kickedPlayers[p.id]) return;
                 if (arenaState.players && arenaState.players[p.id]) {
                     arenaState.players[p.id].score = p.score;
                     arenaState.players[p.id].updatedAt = p.updatedAt;
@@ -2867,6 +2940,7 @@
             } else if (data.type === 'MATCH_WON') {
                 if (data.round && data.round !== arenaState.round) return;
                 if (arenaState.status !== 'playing') return;
+                if (data.winner && arenaState.kickedPlayers && arenaState.kickedPlayers[data.winner.id]) return;
 
                 arenaState.status = 'ended';
                 arenaState.winner = data.winner;
@@ -2875,7 +2949,7 @@
             }
         }
 
-        function broadcastToAllStudents(message) {
+        async function broadcastToAllStudents(message) {
             Object.values(connectedClients).forEach(conn => {
                 if (conn && conn.open) {
                     try { conn.send(message); } catch(e) {}
@@ -2883,14 +2957,14 @@
             });
 
             if (broadcastChannel) {
-                broadcastChannel.postMessage(message);
+                try { broadcastChannel.postMessage(message); } catch(e) {}
             }
 
-            if (isFbReady && fbDb && window.fbModules && currentArenaId) {
+            if (isFbReady && fbDb && window.fbModules && currentArenaId && (message.state || arenaState)) {
                 try {
                     const { doc, setDoc } = window.fbModules;
                     const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
-                    setDoc(aRef, message.state || arenaState, { merge: true });
+                    await setDoc(aRef, message.state || arenaState, { merge: true });
                 } catch (e) {
                     console.warn("廣播 Firestore 狀態失敗:", e);
                 }
@@ -2898,6 +2972,9 @@
         }
 
         async function joinArenaSubmit() {
+            if (window.initFirebaseSync && !isFbReady) {
+                try { await window.initFirebaseSync(); } catch (e) {}
+            }
             const code = document.getElementById('join-arena-code').value.trim();
             const name = document.getElementById('join-player-name').value.trim();
 
@@ -2910,6 +2987,8 @@
                 return;
             }
 
+            // 每次點擊進入時生成全新選手 ID，確保曾被移除的選手重新登入時順暢無阻
+            myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
             currentArenaId = code;
             myPlayerName = name;
             myCurrentScore = 0;
@@ -2932,21 +3011,12 @@
                     if (snap.exists()) {
                         const arenaData = snap.data();
                         if (arenaData.status === 'dismissed') {
-                            showToast("該擂台已被解散！", false);
+                            showToast("該擂台已被老師關閉或解散！", false);
+                            currentArenaId = null;
                             return;
                         }
 
-                        const pRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players', myPlayerId);
-                        await setDoc(pRef, {
-                            id: myPlayerId,
-                            name: name,
-                            score: 0,
-                            round: arenaData.round || 1,
-                            updatedAt: new Date().toISOString()
-                        });
-
-                        onArenaDataUpdated(arenaData);
-
+                        // 先綁定房間與個人節點即時監聽，確保不會漏接任何狀態變更
                         if (arenaUnsubDoc) arenaUnsubDoc();
                         arenaUnsubDoc = onSnapshot(arenaDocRef, (docSnap) => {
                             if (!docSnap.exists() || docSnap.data().status === 'dismissed') {
@@ -2969,11 +3039,16 @@
                             console.warn("Firestore 房間監聽提示:", err);
                         });
 
-                        // 額外監聽學生個人選手文件，一旦老師移除並刪除該文件，學生端立即同步斷線退出
+                        const pRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', code, 'players', myPlayerId);
                         if (arenaUnsubMyPlayer) arenaUnsubMyPlayer();
                         let hasConfirmedJoined = false;
                         arenaUnsubMyPlayer = onSnapshot(pRef, (playerSnap) => {
                             if (playerSnap.exists()) {
+                                const pData = playerSnap.data();
+                                if (pData && pData.kicked) {
+                                    handleStudentKicked();
+                                    return;
+                                }
                                 hasConfirmedJoined = true;
                             } else if (hasConfirmedJoined && !isTeacherHost && currentArenaId === code) {
                                 handleStudentKicked();
@@ -2982,7 +3057,18 @@
                             console.warn("Firestore 個人選手監聽提示:", err);
                         });
 
-                        // 啟動每 2 秒主動巡檢防護，確保任何網路延遲或快取情況下被踢除都能準確退回首頁
+                        await setDoc(pRef, {
+                            id: myPlayerId,
+                            name: name,
+                            score: 0,
+                            kicked: false,
+                            round: arenaData.round || 1,
+                            updatedAt: new Date().toISOString()
+                        });
+
+                        onArenaDataUpdated(arenaData);
+
+                        // 啟動每 1.5 秒主動巡檢防護，確保任何網路延遲或快取情況下被踢除或關房都能準確退回首頁
                         kickCheckInterval = setInterval(async () => {
                             if (isTeacherHost || !currentArenaId) {
                                 clearInterval(kickCheckInterval);
@@ -2999,12 +3085,20 @@
                                     handleStudentKicked();
                                     return;
                                 }
+                                if (hasStudentRegisteredInRoom && aData.players && !aData.players[myPlayerId]) {
+                                    handleStudentKicked();
+                                    return;
+                                }
                                 const myPSnap = await getDoc(pRef);
+                                if (myPSnap.exists() && myPSnap.data().kicked) {
+                                    handleStudentKicked();
+                                    return;
+                                }
                                 if (hasConfirmedJoined && !myPSnap.exists()) {
                                     handleStudentKicked();
                                 }
                             } catch (e) {}
-                        }, 2000);
+                        }, 1500);
 
                         showToast("已成功透過雲端通道連入擂台！", true);
                     }
@@ -3038,16 +3132,28 @@
                     });
 
                     clientConn.on('data', (data) => {
-                        if (data.type === 'ARENA_STATE_SYNC') {
-                            if (data.state?.kickedPlayers && data.state.kickedPlayers[myPlayerId]) {
+                        if (!data) return;
+                        if (data.type === 'ARENA_DISMISSED') {
+                            handleStudentArenaDismissed();
+                        } else if (data.type === 'PLAYER_KICKED' && data.playerId === myPlayerId) {
+                            handleStudentKicked();
+                        } else if (data.type === 'ARENA_STATE_SYNC') {
+                            if (!data.state || data.state.status === 'dismissed') {
+                                handleStudentArenaDismissed();
+                                return;
+                            }
+                            if (data.state.kickedPlayers && data.state.kickedPlayers[myPlayerId]) {
                                 handleStudentKicked();
                                 return;
                             }
                             onArenaDataUpdated(data.state);
-                        } else if (data.type === 'ARENA_DISMISSED') {
+                        }
+                    });
+
+                    clientConn.on('close', () => {
+                        // 若沒有雲端連線且主機已斷開 P2P 通道，檢查是否仍在房間中
+                        if (!isFbReady && !isTeacherHost && currentArenaId) {
                             handleStudentArenaDismissed();
-                        } else if (data.type === 'PLAYER_KICKED' && data.playerId === myPlayerId) {
-                            handleStudentKicked();
                         }
                     });
 
@@ -3145,6 +3251,18 @@
                 const msg = event.data;
                 if (!msg) return;
 
+                // 同步處理名冊與成績廣播
+                if (msg.type === 'SYNC_ROSTER_UPDATE' && Array.isArray(msg.roster)) {
+                    rosterList = msg.roster;
+                    renderRosterTable();
+                    renderScoreFilterOptions();
+                    return;
+                } else if (msg.type === 'SYNC_SCORE_RECORD' && msg.record) {
+                    scoreHistory.unshift(msg.record);
+                    renderScoresTable();
+                    return;
+                }
+
                 if (isTeacherHost && arenaState) {
                     if (msg.type === 'PLAYER_JOIN' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleHostReceivedData(msg, null);
@@ -3153,12 +3271,16 @@
                     } else if (msg.type === 'MATCH_WON' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleHostReceivedData(msg, null);
                     }
-                } else if (!isTeacherHost) {
+                } else if (!isTeacherHost && currentArenaId) {
                     if (msg.type === 'ARENA_DISMISSED' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleStudentArenaDismissed();
                     } else if (msg.type === 'PLAYER_KICKED' && msg.playerId === myPlayerId && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleStudentKicked();
                     } else if (msg.type === 'ARENA_STATE_SYNC' && msg.state && msg.state.id === currentArenaId) {
+                        if (msg.state.status === 'dismissed') {
+                            handleStudentArenaDismissed();
+                            return;
+                        }
                         if (msg.state.kickedPlayers && msg.state.kickedPlayers[myPlayerId]) {
                             handleStudentKicked();
                             return;
@@ -3208,10 +3330,24 @@
         }
 
         function onArenaDataUpdated(data) {
-            // 若學生端收到最新狀態中明確包含自己被踢除的標記，立即強制退出
-            if (!isTeacherHost && data && data.kickedPlayers && data.kickedPlayers[myPlayerId]) {
-                handleStudentKicked();
-                return;
+            if (!data) return;
+
+            // 若學生端收到房間已關閉/解散訊號，無論在等待、比賽中或結算畫面，立即強制退回首頁
+            if (!isTeacherHost) {
+                if (data.status === 'dismissed') {
+                    handleStudentArenaDismissed();
+                    return;
+                }
+                if (data.kickedPlayers && data.kickedPlayers[myPlayerId]) {
+                    handleStudentKicked();
+                    return;
+                }
+                if (data.players && data.players[myPlayerId]) {
+                    hasStudentRegisteredInRoom = true;
+                } else if (hasStudentRegisteredInRoom && data.players && !data.players[myPlayerId]) {
+                    handleStudentKicked();
+                    return;
+                }
             }
 
             const previousStatus = arenaState?.status;
@@ -3541,6 +3677,11 @@
                     } catch(e) {}
                 }
                 stopCompSpeechRecognition();
+                if (arenaState) {
+                    arenaState.status = 'ended';
+                    arenaState.winner = updateData;
+                    onArenaDataUpdated(arenaState);
+                }
                 return;
             }
 
@@ -3583,26 +3724,45 @@
             if (!arenaState.kickedPlayers) arenaState.kickedPlayers = {};
             arenaState.kickedPlayers[playerId] = true;
 
-            renderLobbyPlayers(arenaState.players || {});
+            if (arenaState.status === 'waiting') {
+                renderLobbyPlayers(arenaState.players || {});
+            } else {
+                renderMonitorBoard(arenaState.players || {});
+            }
 
-            // 透過 WebRTC、BroadcastChannel 與 Firestore 通知目標學生端斷線退出
-            broadcastToAllStudents({ type: 'PLAYER_KICKED', arenaId: currentArenaId, playerId: playerId });
-            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
-
+            // 1. 先透過 Firestore 標記選手節點 kicked: true 並更新主房間狀態，確保跨網域學生 100% 收到通知
             if (isFbReady && fbDb && window.fbModules && currentArenaId) {
                 try {
-                    const { doc, deleteDoc, updateDoc, deleteField } = window.fbModules;
+                    const { doc, setDoc, deleteDoc, updateDoc, deleteField } = window.fbModules;
                     const pDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId, 'players', playerId);
-                    await deleteDoc(pDocRef);
+                    await setDoc(pDocRef, { id: playerId, kicked: true }, { merge: true });
                     const aDocRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', currentArenaId);
                     await updateDoc(aDocRef, { 
                         [`players.${playerId}`]: deleteField(),
                         [`kickedPlayers.${playerId}`]: true
                     });
+                    setTimeout(() => {
+                        deleteDoc(pDocRef).catch(() => {});
+                    }, 1500);
                 } catch(e) {
                     console.warn("Firestore 移除選手同步提示:", e);
                 }
             }
+
+            // 2. 透過 WebRTC 與 BroadcastChannel 發送強制踢除指令
+            await broadcastToAllStudents({ type: 'PLAYER_KICKED', arenaId: currentArenaId, playerId: playerId });
+            await broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+
+            // 3. 延遲關閉該學生的點對點連線，確保封包已送達
+            setTimeout(() => {
+                Object.keys(connectedClients).forEach(peerKey => {
+                    const c = connectedClients[peerKey];
+                    if (c && c.playerId === playerId) {
+                        try { c.close(); } catch(e) {}
+                        delete connectedClients[peerKey];
+                    }
+                });
+            }, 400);
 
             showToast(`已移除選手「${playerName}」並中斷其連線`, true);
         }
@@ -3639,28 +3799,83 @@
             window.open(url, '_blank');
         }
 
+        function leaveOrCloseArena() {
+            if (isTeacherHost) {
+                dismissArena();
+            } else {
+                // 學生主動離開擂台時完整清理所有背景監聽器與連線
+                if (kickCheckInterval) {
+                    clearInterval(kickCheckInterval);
+                    kickCheckInterval = null;
+                }
+                if (compNextQTimer) clearTimeout(compNextQTimer);
+                if (countdownTimer) clearInterval(countdownTimer);
+                document.getElementById('comp-countdown-overlay').classList.add('hidden');
+                document.getElementById('comp-countdown-overlay').classList.remove('flex');
+                isCompAnswering = false;
+                hasStudentRegisteredInRoom = false;
+                stopCompSpeechRecognition();
+                if (arenaUnsubDoc) {
+                    try { arenaUnsubDoc(); } catch(e) {}
+                    arenaUnsubDoc = null;
+                }
+                if (arenaUnsubMyPlayer) {
+                    try { arenaUnsubMyPlayer(); } catch(e) {}
+                    arenaUnsubMyPlayer = null;
+                }
+                if (clientConn) {
+                    try { clientConn.close(); } catch(e) {}
+                    clientConn = null;
+                }
+                if (clientPeer) {
+                    try { clientPeer.destroy(); } catch(e) {}
+                    clientPeer = null;
+                }
+                currentArenaId = null;
+                arenaState = null;
+                showCompHomeView();
+            }
+        }
+
         async function dismissArena() {
             if (!arenaState || !isTeacherHost) {
-                showCompHomeView();
+                leaveOrCloseArena();
                 return;
             }
+            const closingArenaId = currentArenaId;
             arenaState.status = 'dismissed';
-            broadcastToAllStudents({ type: 'ARENA_DISMISSED', arenaId: currentArenaId });
-            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
 
             if (arenaUnsubPlayers) {
                 try { arenaUnsubPlayers(); } catch (e) {}
                 arenaUnsubPlayers = null;
             }
-            if (hostPeer) {
-                try { hostPeer.destroy(); } catch (e) {}
-                hostPeer = null;
+
+            // 1. 先將房間狀態寫入雲端與廣播通道，確保所有學生在連線關閉前收到解散通知
+            await broadcastToAllStudents({ type: 'ARENA_DISMISSED', arenaId: closingArenaId, state: arenaState });
+            await broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
+
+            if (isFbReady && fbDb && window.fbModules && closingArenaId) {
+                try {
+                    const { doc, setDoc } = window.fbModules;
+                    const aRef = doc(fbDb, 'artifacts', APP_ID, 'public', 'data', 'arenas', closingArenaId);
+                    await setDoc(aRef, { status: 'dismissed', updatedAt: new Date().toISOString() }, { merge: true });
+                } catch (e) {}
             }
+
+            // 2. 延遲 500ms 後再銷毀 WebRTC 主機，確保所有點對點解散封包完整送達學生端
+            const peerToDestroy = hostPeer;
+            hostPeer = null;
             connectedClients = {};
+            setTimeout(() => {
+                if (peerToDestroy) {
+                    try { peerToDestroy.destroy(); } catch (e) {}
+                }
+            }, 500);
+
             currentArenaId = null;
             arenaState = null;
             isTeacherHost = false;
-            showToast("已解散擂台並通知所有連線選手", true);
+            showToast("已關閉並解散擂台，所有連線選手已同步退出", true);
             showCompHomeView();
         }
 
@@ -3695,7 +3910,12 @@
                     <div class="bg-white p-2.5 rounded-xl border shadow-sm space-y-1.5">
                         <div class="flex justify-between items-center text-xs font-bold">
                             <span class="text-gray-800">${idx + 1}. ${p.name}</span>
-                            <span class="text-indigo-600 font-black">${isScoreHidden ? '🔒 隱藏中' : `${score} / ${target} 分`}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-indigo-600 font-black">${isScoreHidden ? '🔒 隱藏中' : `${score} / ${target} 分`}</span>
+                                <button onclick="kickLobbyPlayer('${p.id}')" title="剔除此選手並斷開連線" class="w-5 h-5 rounded-md bg-rose-100 hover:bg-rose-500 text-rose-600 hover:text-white flex items-center justify-center transition">
+                                    <i class="fa-solid fa-xmark text-[10px]"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                             <div class="bg-gradient-to-r from-indigo-500 to-emerald-500 h-full transition-all duration-300" style="width: ${isScoreHidden ? 0 : pct}%"></div>
@@ -3746,12 +3966,19 @@
 
             const rematchBtn = document.getElementById('arena-rematch-btn');
             const studentNotice = document.getElementById('student-rematch-waiting-notice');
+            const leaveOrCloseBtn = document.getElementById('arena-leave-or-close-btn');
             if (isTeacherHost) {
                 rematchBtn.classList.remove('hidden');
                 studentNotice.classList.add('hidden');
+                if (leaveOrCloseBtn) {
+                    leaveOrCloseBtn.innerHTML = '<i class="fa-solid fa-power-off mr-1"></i> 關閉並解散擂台';
+                }
             } else {
                 rematchBtn.classList.add('hidden');
                 studentNotice.classList.remove('hidden');
+                if (leaveOrCloseBtn) {
+                    leaveOrCloseBtn.innerHTML = '離開競賽擂台';
+                }
             }
         }
 
