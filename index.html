@@ -520,9 +520,16 @@
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center bg-gray-50 p-4 rounded-2xl border">
-                    <div class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border shadow-sm space-y-2">
-                        <span class="text-xs font-bold text-gray-500">掃描下方 QR 碼進入擂台</span>
-                        <img id="lobby-qrcode-img" src="" alt="擂台 QR 碼" class="w-36 h-36 border p-1 rounded-lg">
+                    <div onclick="openQrZoomModal()" title="點擊放大顯示 QR 碼與房間號碼" class="group flex flex-col items-center justify-center p-3 bg-white rounded-xl border hover:border-indigo-400 shadow-sm hover:shadow-md space-y-2 cursor-pointer transition relative">
+                        <span class="text-xs font-bold text-gray-500 group-hover:text-indigo-600 transition flex items-center gap-1">
+                            <i class="fa-solid fa-magnifying-glass-plus text-indigo-500"></i> 掃描下方 QR 碼進入擂台 (點擊放大)
+                        </span>
+                        <div class="relative">
+                            <img id="lobby-qrcode-img" src="" alt="擂台 QR 碼" class="w-36 h-36 border p-1 rounded-lg group-hover:scale-105 transition-transform">
+                            <div class="absolute bottom-1.5 right-1.5 bg-indigo-600/90 text-white w-7 h-7 rounded-lg flex items-center justify-center shadow pointer-events-none group-hover:bg-indigo-700 transition">
+                                <i class="fa-solid fa-expand text-xs"></i>
+                            </div>
+                        </div>
                         <div class="text-center mt-1">
                             <span class="text-xs text-gray-400">或於網頁輸入 3 碼代碼：</span>
                             <div id="lobby-arena-code" class="text-3xl font-black tracking-widest text-indigo-600">---</div>
@@ -766,15 +773,21 @@
         <div id="rematch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
             <div class="bg-white rounded-3xl p-5 md:p-6 w-full max-w-2xl shadow-2xl border space-y-4 max-h-[92vh] overflow-y-auto">
                 <div class="flex items-center justify-between border-b pb-3">
-                    <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
-                        <i class="fa-solid fa-fire text-amber-500"></i> 原擂台（代碼: <span id="rematch-modal-code" class="text-indigo-600">---</span>）繼續比賽
+                    <h3 class="font-black text-gray-800 text-base flex flex-wrap items-center gap-1.5">
+                        <i class="fa-solid fa-fire text-amber-500"></i> 原擂台（代碼: 
+                        <button type="button" onclick="openQrZoomModal()" title="點擊顯示放大版 QR 碼與房間號碼" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl border border-indigo-200 transition shadow-sm cursor-pointer group">
+                            <span id="rematch-modal-code" class="font-black tracking-wider text-lg">---</span>
+                            <i class="fa-solid fa-qrcode text-xs text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded-md">點擊放大QR碼</span>
+                        </button>
+                        ）繼續比賽
                     </h3>
                     <button onclick="closeRematchModal()" class="text-gray-400 hover:text-gray-600">
                         <i class="fa-solid fa-xmark text-lg"></i>
                     </button>
                 </div>
 
-                <p class="text-xs text-gray-500">全員保留在原擂台（學生無需重新掃碼）。您可以更換單元、調整題數，或於右側移除已離開的選手後直接開打！</p>
+                <p class="text-xs text-gray-500">全員已切換至等待開戰畫面（點選上方代碼數字可放大顯示 QR 碼供重登學生掃描）。您可以更換單元、調整題數，或於右側移除已離開的選手後直接開打！</p>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
                     <!-- 左欄：比賽規則設定 -->
@@ -843,6 +856,33 @@
                         <i class="fa-solid fa-play"></i> 全員開始新一輪！
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <!-- 放大版 QR 碼與房間號碼彈窗 -->
+        <div id="qr-zoom-modal" onclick="if(event.target === this) closeQrZoomModal()" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4 z-[60]">
+            <div class="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl border-2 border-indigo-200 text-center space-y-4 relative animate- scale-100">
+                <button onclick="closeQrZoomModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+                <div class="space-y-1">
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-extrabold">
+                        <i class="fa-solid fa-qrcode"></i> 掃描 QR 碼或輸入代碼加入擂台
+                    </div>
+                    <h3 id="qr-zoom-title" class="text-lg font-black text-gray-800 pt-1">數學計算爭霸擂台</h3>
+                </div>
+                <div class="flex justify-center">
+                    <div class="p-3 bg-white border-4 border-indigo-500 rounded-3xl shadow-lg">
+                        <img id="qr-zoom-img" src="" alt="放大版擂台 QR 碼" class="w-64 h-64 md:w-72 md:h-72 object-contain">
+                    </div>
+                </div>
+                <div class="bg-indigo-50 py-3 px-4 rounded-2xl border border-indigo-100">
+                    <div class="text-xs font-bold text-gray-500">3 碼擂台房間號碼</div>
+                    <div id="qr-zoom-code" class="text-5xl md:text-6xl font-black tracking-widest text-indigo-600 mt-0.5">---</div>
+                </div>
+                <button onclick="closeQrZoomModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow transition">
+                    關閉放大視窗
+                </button>
             </div>
         </div>
 
@@ -2909,6 +2949,18 @@
             document.getElementById('lobby-arena-speech-badge').innerText = enableSpeech ? '語音：已開啟' : '語音：已停用';
             document.getElementById('lobby-arena-speech-badge').className = enableSpeech ? 'font-bold text-amber-200' : 'font-bold text-red-200';
 
+            const qrApiUrl = getArenaQrImageUrl(code, 220);
+            document.getElementById('lobby-qrcode-img').src = qrApiUrl;
+
+            hideAllCompViews();
+            document.getElementById('comp-lobby-view').classList.remove('hidden');
+
+            if (broadcastChannel) {
+                broadcastChannel.postMessage({ type: 'ARENA_STATE_SYNC', state: arenaState });
+            }
+        }
+
+        function getArenaJoinUrl(code) {
             let joinUrl = window.location.href.split('?')[0] + '?arena=' + code;
             const savedCfg = localStorage.getItem('custom_firebase_config');
             if (savedCfg) {
@@ -2925,15 +2977,31 @@
                     joinUrl += '&fc=' + btoa(encodeURIComponent(JSON.stringify(compact)));
                 } catch(e) {}
             }
-            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
-            document.getElementById('lobby-qrcode-img').src = qrApiUrl;
+            return joinUrl;
+        }
 
-            hideAllCompViews();
-            document.getElementById('comp-lobby-view').classList.remove('hidden');
+        function getArenaQrImageUrl(code, size = 360) {
+            const joinUrl = getArenaJoinUrl(code);
+            return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(joinUrl)}`;
+        }
 
-            if (broadcastChannel) {
-                broadcastChannel.postMessage({ type: 'ARENA_STATE_SYNC', state: arenaState });
-            }
+        function openQrZoomModal() {
+            const code = arenaState?.id || currentArenaId;
+            if (!code) return;
+            const title = arenaState?.title || '數學計算爭霸擂台';
+            document.getElementById('qr-zoom-title').innerText = title;
+            document.getElementById('qr-zoom-code').innerText = code;
+            document.getElementById('qr-zoom-img').src = getArenaQrImageUrl(code, 360);
+
+            const modal = document.getElementById('qr-zoom-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeQrZoomModal() {
+            const modal = document.getElementById('qr-zoom-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
         }
 
         function initHostPeer(code) {
@@ -3448,8 +3516,16 @@
 
             if (isTeacherHost) {
                 renderRematchPlayers(arenaState.players || {});
+                const rematchModal = document.getElementById('rematch-modal');
+                const isRematchModalOpen = rematchModal && !rematchModal.classList.contains('hidden');
+
                 if (arenaState.status === 'waiting') {
                     renderLobbyPlayers(arenaState.players || {});
+                    // 若老師正在「原擂台再比一場」設定視窗中，保持當前背景畫面不跳回建立大廳
+                    if (!isRematchModalOpen) {
+                        hideAllCompViews();
+                        document.getElementById('comp-lobby-view').classList.remove('hidden');
+                    }
                 } else if (arenaState.status === 'countdown') {
                     hideAllCompViews();
                     document.getElementById('comp-teacher-monitor-view').classList.remove('hidden');
@@ -3469,6 +3545,13 @@
             }
 
             if (arenaState.status === 'waiting') {
+                if (compNextQTimer) clearTimeout(compNextQTimer);
+                if (countdownTimer) clearInterval(countdownTimer);
+                document.getElementById('comp-countdown-overlay').classList.add('hidden');
+                document.getElementById('comp-countdown-overlay').classList.remove('flex');
+                isCompAnswering = false;
+                stopCompSpeechRecognition();
+
                 hideAllCompViews();
                 document.getElementById('comp-student-waiting-view').classList.remove('hidden');
                 document.getElementById('student-waiting-name').innerText = myPlayerName;
@@ -4118,6 +4201,16 @@
             const modal = document.getElementById('rematch-modal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+
+            // 當老師點選「原擂台再比一場」時，立即將狀態設為 waiting 並同步推播，讓所有學生的畫面從得獎畫面切換至「已成功加入擂台！」等待開戰畫面
+            arenaState.status = 'waiting';
+            arenaState.winner = null;
+            if (arenaState.players) {
+                Object.keys(arenaState.players).forEach(pId => {
+                    arenaState.players[pId].score = 0;
+                });
+            }
+            broadcastToAllStudents({ type: 'ARENA_STATE_SYNC', state: arenaState });
         }
 
         function closeRematchModal() {
