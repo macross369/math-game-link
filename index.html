@@ -4163,12 +4163,36 @@
             if (pArray.length === 0) {
                 lbList.innerHTML = `<div class="text-center text-gray-400 py-3">無參賽選手資料</div>`;
             } else {
-                lbList.innerHTML = pArray.map((p, idx) => `
-                    <div class="flex items-center justify-between p-2 bg-white rounded-xl border">
-                        <span class="font-bold text-gray-700">第 ${idx + 1} 名 · ${p.name}</span>
-                        <span class="font-black text-indigo-600">${p.score || 0} 分</span>
-                    </div>
-                `).join('');
+                lbList.innerHTML = pArray.map((p, idx) => {
+                    const isMe = !isTeacherHost && (p.id === myPlayerId || (myPlayerName && p.name === myPlayerName));
+                    const rowClass = isMe
+                        ? "flex items-center justify-between p-2.5 bg-amber-50 rounded-xl border-2 border-amber-400 shadow-sm ring-2 ring-amber-200/60"
+                        : "flex items-center justify-between p-2 bg-white rounded-xl border";
+                    const textClass = isMe ? "font-black text-amber-900" : "font-bold text-gray-700";
+                    const scoreClass = isMe ? "font-black text-amber-700 text-sm" : "font-black text-indigo-600";
+                    const myBadge = isMe
+                        ? `<span class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500 text-white text-[11px] font-extrabold rounded-full shadow-sm animate-pulse"><i class="fa-solid fa-star text-yellow-200"></i> 我的成績</span>`
+                        : "";
+                    return `
+                        <div id="${isMe ? 'my-leaderboard-row' : ''}" class="${rowClass}">
+                            <div class="flex items-center flex-wrap">
+                                <span class="${textClass}">第 ${idx + 1} 名 · ${p.name}</span>
+                                ${myBadge}
+                            </div>
+                            <span class="${scoreClass}">${p.score || 0} 分</span>
+                        </div>
+                    `;
+                }).join('');
+
+                // 若為學生端且排行榜人數較多，自動將捲軸平滑捲動至學生自己的排名列
+                if (!isTeacherHost) {
+                    setTimeout(() => {
+                        const myRow = document.getElementById('my-leaderboard-row');
+                        if (myRow) {
+                            myRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }
+                    }, 150);
+                }
             }
 
             const rematchBtn = document.getElementById('arena-rematch-btn');
