@@ -582,7 +582,7 @@
 
                     <div>
                         <label class="block font-bold text-xs text-gray-700 mb-1">參賽姓名或暱稱：</label>
-                        <input type="text" id="join-player-name" placeholder="請輸入您的姓名 (如：林小華)" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-800 focus:ring-2 focus:ring-amber-500">
+                        <input type="text" id="join-player-name" oninput="saveSessionPlayerName(this.value)" placeholder="請輸入您的姓名 (如：林小華)" class="w-full p-2.5 bg-white border border-gray-300 rounded-xl text-xs font-bold text-gray-800 focus:ring-2 focus:ring-amber-500">
                     </div>
 
                     <div class="grid grid-cols-2 gap-2 pt-1">
@@ -762,9 +762,9 @@
             </div>
         </div>
 
-        <!-- 原擂台續賽設定彈窗 -->
+        <!-- 原擂台續賽設定彈窗 (左右雙欄：左側規則設定 + 右側目前選手名單與移除功能) -->
         <div id="rematch-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
-            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border space-y-4">
+            <div class="bg-white rounded-3xl p-5 md:p-6 w-full max-w-2xl shadow-2xl border space-y-4 max-h-[92vh] overflow-y-auto">
                 <div class="flex items-center justify-between border-b pb-3">
                     <h3 class="font-black text-gray-800 text-base flex items-center gap-2">
                         <i class="fa-solid fa-fire text-amber-500"></i> 原擂台（代碼: <span id="rematch-modal-code" class="text-indigo-600">---</span>）繼續比賽
@@ -774,46 +774,64 @@
                     </button>
                 </div>
 
-                <p class="text-xs text-gray-500">全員保留在原擂台（學生無需重新掃碼）。您可以更換單元或達標題數後直接開打！</p>
+                <p class="text-xs text-gray-500">全員保留在原擂台（學生無需重新掃碼）。您可以更換單元、調整題數，或於右側移除已離開的選手後直接開打！</p>
 
-                <div class="space-y-3 bg-gray-50 p-3.5 rounded-2xl border text-xs md:text-sm">
-                    <div>
-                        <label class="block font-bold text-gray-700 mb-1">測驗主題：</label>
-                        <select id="rematch-topic-select" onchange="updateRematchModeOptions()" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500">
-                            <option value="multiply">乘法運算</option>
-                            <option value="add">加法運算</option>
-                            <option value="sub">減法運算</option>
-                            <option value="divide">除法運算</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-gray-700 mb-1">題型單元：</label>
-                        <select id="rematch-mode-select" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500"></select>
-                    </div>
-
-                    <div>
-                        <label class="block font-bold text-gray-700 mb-1">獲勝達標題數：</label>
-                        <select id="rematch-target-select" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500">
-                            <option value="5">5 題獲勝</option>
-                            <option value="10">10 題獲勝</option>
-                            <option value="15">15 題獲勝</option>
-                            <option value="20">20 題獲勝 (極限)</option>
-                        </select>
-                    </div>
-
-                    <div class="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-microphone text-indigo-600 text-sm"></i>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+                    <!-- 左欄：比賽規則設定 -->
+                    <div class="space-y-3 bg-gray-50 p-3.5 rounded-2xl border text-xs md:text-sm flex flex-col justify-between">
+                        <div class="space-y-3">
                             <div>
-                                <div class="text-xs font-bold text-gray-800">允許學生使用語音輸入</div>
-                                <div class="text-[11px] text-gray-400">關閉後本輪僅能以鍵盤作答</div>
+                                <label class="block font-bold text-gray-700 mb-1">測驗主題：</label>
+                                <select id="rematch-topic-select" onchange="updateRematchModeOptions()" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500">
+                                    <option value="multiply">乘法運算</option>
+                                    <option value="add">加法運算</option>
+                                    <option value="sub">減法運算</option>
+                                    <option value="divide">除法運算</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">題型單元：</label>
+                                <select id="rematch-mode-select" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500"></select>
+                            </div>
+
+                            <div>
+                                <label class="block font-bold text-gray-700 mb-1">獲勝達標題數：</label>
+                                <select id="rematch-target-select" class="w-full p-2 bg-white border border-gray-300 rounded-xl font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500">
+                                    <option value="5">5 題獲勝</option>
+                                    <option value="10">10 題獲勝</option>
+                                    <option value="15">15 題獲勝</option>
+                                    <option value="20">20 題獲勝 (極限)</option>
+                                </select>
                             </div>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="rematch-enable-speech" checked class="sr-only peer">
-                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                        </label>
+
+                        <div class="flex items-center justify-between p-2.5 bg-white border border-gray-200 rounded-xl mt-2">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-microphone text-indigo-600 text-sm"></i>
+                                <div>
+                                    <div class="text-xs font-bold text-gray-800">允許學生使用語音輸入</div>
+                                    <div class="text-[11px] text-gray-400">關閉後本輪僅能以鍵盤作答</div>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="rematch-enable-speech" checked class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 右欄：目前在場選手名單與移除控制 -->
+                    <div class="bg-gray-50 p-3.5 rounded-2xl border flex flex-col justify-between space-y-2">
+                        <div class="flex items-center justify-between border-b border-gray-200 pb-2">
+                            <span class="text-xs font-extrabold text-gray-700 flex items-center gap-1.5">
+                                <i class="fa-solid fa-users text-indigo-600"></i> 目前參賽選手 (<span id="rematch-player-count" class="text-indigo-600 font-black">0</span> 人)
+                            </span>
+                            <span class="text-[11px] text-gray-400">點選 × 可移除選手</span>
+                        </div>
+                        <div id="rematch-player-list" class="max-h-52 overflow-y-auto space-y-1.5 p-2 bg-white rounded-xl border text-xs flex-1">
+                            <div class="text-gray-400 text-center py-8">目前尚無參賽選手</div>
+                        </div>
                     </div>
                 </div>
 
@@ -985,7 +1003,7 @@
             </h3>
             <p class="text-xs text-gray-500">請輸入已在名冊上登記的 Google 信箱與姓名，完成測驗後將自動記錄學習歷程。</p>
             <div class="space-y-2 text-xs">
-                <input type="text" id="login-student-name" placeholder="學生姓名" class="w-full p-2.5 border rounded-xl font-bold">
+                <input type="text" id="login-student-name" oninput="saveSessionPlayerName(this.value)" placeholder="學生姓名" class="w-full p-2.5 border rounded-xl font-bold">
                 <input type="email" id="login-student-email" placeholder="Google 信箱帳號" class="w-full p-2.5 border rounded-xl font-bold">
             </div>
             <div class="grid grid-cols-2 gap-2 pt-1">
@@ -1056,6 +1074,7 @@
         let arenaUnsubMyPlayer = null; // Firestore 個人選手狀態監聽清理器
         let kickCheckInterval = null; // 學生端被移除狀態主動巡檢計時器
         let hasStudentRegisteredInRoom = false; // 標記學生是否已成功在名單上註冊
+        let isStudentInArena = false; // 嚴格鎖定學生是否處於有效擂台連線中，防止被踢除後遭延遲封包拉回等待室
         let countdownTimer = null; // 3-2-1 倒數計時器
         let currentCountdownRound = 0; // 避免同回合重複觸發倒數
 
@@ -1099,6 +1118,7 @@
         });
 
         window.onload = function() {
+            restoreSessionPlayerName();
             updateModeOptions();
             initWorksheetSection();
             initArenaBroadcastListener();
@@ -1107,6 +1127,43 @@
                 initFirebaseSync();
             }
         };
+
+        // ================== 工作階段學生姓名記憶與自動帶入 (未關閉網頁前持續保留) ==================
+        function saveSessionPlayerName(val) {
+            const trimmed = (val || '').trim();
+            myPlayerName = trimmed;
+            try {
+                if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem('math_challenge_session_player_name', trimmed);
+                }
+            } catch (e) {}
+        }
+
+        function getSavedSessionPlayerName() {
+            if (myPlayerName && myPlayerName.trim()) return myPlayerName.trim();
+            if (currentStudent && !currentStudent.isGuest && currentStudent.name) return currentStudent.name;
+            try {
+                if (typeof sessionStorage !== 'undefined') {
+                    return sessionStorage.getItem('math_challenge_session_player_name') || '';
+                }
+            } catch (e) {}
+            return '';
+        }
+
+        function restoreSessionPlayerName() {
+            const savedName = getSavedSessionPlayerName();
+            if (savedName) {
+                myPlayerName = savedName;
+                const joinNameInput = document.getElementById('join-player-name');
+                if (joinNameInput && !joinNameInput.value) {
+                    joinNameInput.value = savedName;
+                }
+                const loginNameInput = document.getElementById('login-student-name');
+                if (loginNameInput && !loginNameInput.value) {
+                    loginNameInput.value = savedName;
+                }
+            }
+        }
 
         // ================== URL 參數自動帶入擂台代碼 (QR碼掃描進入) ==================
         function checkUrlArenaParams() {
@@ -1136,6 +1193,11 @@
                 showToast("已登出學生帳號", true);
                 return;
             }
+            const savedName = getSavedSessionPlayerName();
+            const loginNameInput = document.getElementById('login-student-name');
+            if (loginNameInput && !loginNameInput.value && savedName) {
+                loginNameInput.value = savedName;
+            }
             const modal = document.getElementById('student-login-modal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
@@ -1158,6 +1220,9 @@
             const finalName = matched ? matched.name : (nameInput || emailInput.split('@')[0]);
 
             currentStudent = { name: finalName, email: emailInput, isGuest: false };
+            saveSessionPlayerName(finalName);
+            const joinNameInput = document.getElementById('join-player-name');
+            if (joinNameInput) joinNameInput.value = finalName;
             document.getElementById('current-user-name').innerText = `${finalName} (${emailInput})`;
             document.getElementById('auth-action-btn').innerHTML = '<i class="fa-solid fa-right-from-bracket text-xs"></i> 登出';
             closeStudentLoginModal();
@@ -2707,8 +2772,12 @@
         function showJoinArenaView() {
             hideAllCompViews();
             document.getElementById('comp-join-view').classList.remove('hidden');
-            if (currentStudent && !currentStudent.isGuest) {
-                document.getElementById('join-player-name').value = currentStudent.name;
+            const joinNameInput = document.getElementById('join-player-name');
+            if (joinNameInput) {
+                const savedName = getSavedSessionPlayerName();
+                if (savedName && !joinNameInput.value.trim()) {
+                    joinNameInput.value = savedName;
+                }
             }
         }
 
@@ -2987,6 +3056,9 @@
                 return;
             }
 
+            // 儲存當前輸入的學生姓名，供未關閉網頁前重複自動帶入
+            saveSessionPlayerName(name);
+
             // 每次點擊進入時生成全新選手 ID，確保曾被移除的選手重新登入時順暢無阻
             myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
             currentArenaId = code;
@@ -2994,6 +3066,7 @@
             myCurrentScore = 0;
             isTeacherHost = false;
             hasStudentRegisteredInRoom = false;
+            isStudentInArena = true;
 
             if (kickCheckInterval) {
                 clearInterval(kickCheckInterval);
@@ -3013,12 +3086,14 @@
                         if (arenaData.status === 'dismissed') {
                             showToast("該擂台已被老師關閉或解散！", false);
                             currentArenaId = null;
+                            isStudentInArena = false;
                             return;
                         }
 
                         // 先綁定房間與個人節點即時監聽，確保不會漏接任何狀態變更
                         if (arenaUnsubDoc) arenaUnsubDoc();
                         arenaUnsubDoc = onSnapshot(arenaDocRef, (docSnap) => {
+                            if (!isStudentInArena || isTeacherHost) return;
                             if (!docSnap.exists() || docSnap.data().status === 'dismissed') {
                                 handleStudentArenaDismissed();
                                 return;
@@ -3043,6 +3118,7 @@
                         if (arenaUnsubMyPlayer) arenaUnsubMyPlayer();
                         let hasConfirmedJoined = false;
                         arenaUnsubMyPlayer = onSnapshot(pRef, (playerSnap) => {
+                            if (!isStudentInArena || isTeacherHost) return;
                             if (playerSnap.exists()) {
                                 const pData = playerSnap.data();
                                 if (pData && pData.kicked) {
@@ -3066,16 +3142,19 @@
                             updatedAt: new Date().toISOString()
                         });
 
-                        onArenaDataUpdated(arenaData);
+                        if (isStudentInArena) {
+                            onArenaDataUpdated(arenaData);
+                        }
 
                         // 啟動每 1.5 秒主動巡檢防護，確保任何網路延遲或快取情況下被踢除或關房都能準確退回首頁
                         kickCheckInterval = setInterval(async () => {
-                            if (isTeacherHost || !currentArenaId) {
+                            if (isTeacherHost || !currentArenaId || !isStudentInArena) {
                                 clearInterval(kickCheckInterval);
                                 return;
                             }
                             try {
                                 const latestArenaSnap = await getDoc(arenaDocRef);
+                                if (!isStudentInArena) return;
                                 if (!latestArenaSnap.exists() || latestArenaSnap.data().status === 'dismissed') {
                                     handleStudentArenaDismissed();
                                     return;
@@ -3090,6 +3169,7 @@
                                     return;
                                 }
                                 const myPSnap = await getDoc(pRef);
+                                if (!isStudentInArena) return;
                                 if (myPSnap.exists() && myPSnap.data().kicked) {
                                     handleStudentKicked();
                                     return;
@@ -3107,10 +3187,13 @@
                 }
             }
 
-            initClientPeer(code, name);
+            if (isStudentInArena) {
+                initClientPeer(code, name);
+            }
         }
 
         function initClientPeer(code, name) {
+            if (!isStudentInArena) return;
             if (typeof Peer === 'undefined' || window.location.protocol === 'about:' || window.location.href.startsWith('about:srcdoc')) {
                 connectViaBroadcastOnly(code, name);
                 return;
@@ -3123,16 +3206,18 @@
             try {
                 clientPeer = new Peer(peerIceConfig);
                 clientPeer.on('open', () => {
+                    if (!isStudentInArena || !currentArenaId) return;
                     const hostPeerId = `matharena-v2-${code}`;
                     clientConn = clientPeer.connect(hostPeerId, { reliable: true });
 
                     clientConn.on('open', () => {
+                        if (!isStudentInArena || !currentArenaId) return;
                         const playerData = { id: myPlayerId, name: name, score: 0 };
                         clientConn.send({ type: 'PLAYER_JOIN', player: playerData });
                     });
 
                     clientConn.on('data', (data) => {
-                        if (!data) return;
+                        if (!data || !isStudentInArena) return;
                         if (data.type === 'ARENA_DISMISSED') {
                             handleStudentArenaDismissed();
                         } else if (data.type === 'PLAYER_KICKED' && data.playerId === myPlayerId) {
@@ -3151,27 +3236,32 @@
                     });
 
                     clientConn.on('close', () => {
-                        // 若沒有雲端連線且主機已斷開 P2P 通道，檢查是否仍在房間中
-                        if (!isFbReady && !isTeacherHost && currentArenaId) {
+                        if (!isFbReady && !isTeacherHost && currentArenaId && isStudentInArena) {
                             handleStudentArenaDismissed();
                         }
                     });
 
                     clientConn.on('error', () => {
-                        connectViaBroadcastOnly(code, name);
+                        if (isStudentInArena) connectViaBroadcastOnly(code, name);
                     });
                 });
 
                 clientPeer.on('error', () => {
-                    connectViaBroadcastOnly(code, name);
+                    if (isStudentInArena) connectViaBroadcastOnly(code, name);
                 });
             } catch (e) {
-                connectViaBroadcastOnly(code, name);
+                if (isStudentInArena) connectViaBroadcastOnly(code, name);
             }
         }
 
         function handleStudentKicked() {
-            if (isTeacherHost) return;
+            if (isTeacherHost || !isStudentInArena) return;
+            // 立即鎖定為非連線狀態，徹底阻擋後續任何延遲抵達的 ARENA_STATE_SYNC 把畫面拉回等待室
+            isStudentInArena = false;
+            currentArenaId = null;
+            arenaState = null;
+            hasStudentRegisteredInRoom = false;
+
             if (kickCheckInterval) {
                 clearInterval(kickCheckInterval);
                 kickCheckInterval = null;
@@ -3181,7 +3271,6 @@
             document.getElementById('comp-countdown-overlay').classList.add('hidden');
             document.getElementById('comp-countdown-overlay').classList.remove('flex');
             isCompAnswering = false;
-            hasStudentRegisteredInRoom = false;
             stopCompSpeechRecognition();
             if (arenaUnsubDoc) {
                 try { arenaUnsubDoc(); } catch(e) {}
@@ -3199,16 +3288,17 @@
                 try { clientPeer.destroy(); } catch(e) {}
                 clientPeer = null;
             }
-            // 重新指派新的玩家 ID，確保學生重新登入時不被舊踢除紀錄攔截
-            myPlayerId = 'p_' + Math.random().toString(36).substr(2, 9);
-            currentArenaId = null;
-            arenaState = null;
             showToast("您已被老師移出擂台名單，若要參賽請重新登入！", false);
             showCompHomeView();
         }
 
         function handleStudentArenaDismissed() {
-            if (isTeacherHost) return;
+            if (isTeacherHost || !isStudentInArena) return;
+            isStudentInArena = false;
+            currentArenaId = null;
+            arenaState = null;
+            hasStudentRegisteredInRoom = false;
+
             if (kickCheckInterval) {
                 clearInterval(kickCheckInterval);
                 kickCheckInterval = null;
@@ -3218,7 +3308,6 @@
             document.getElementById('comp-countdown-overlay').classList.add('hidden');
             document.getElementById('comp-countdown-overlay').classList.remove('flex');
             isCompAnswering = false;
-            hasStudentRegisteredInRoom = false;
             stopCompSpeechRecognition();
             if (arenaUnsubDoc) {
                 try { arenaUnsubDoc(); } catch(e) {}
@@ -3228,17 +3317,20 @@
                 try { arenaUnsubMyPlayer(); } catch(e) {}
                 arenaUnsubMyPlayer = null;
             }
+            if (clientConn) {
+                try { clientConn.close(); } catch(e) {}
+                clientConn = null;
+            }
             if (clientPeer) {
                 try { clientPeer.destroy(); } catch(e) {}
                 clientPeer = null;
             }
-            currentArenaId = null;
-            arenaState = null;
             showToast("老師已解散該擂台，已自動返回擂台大廳", false);
             showCompHomeView();
         }
 
         function connectViaBroadcastOnly(code, name) {
+            if (!isStudentInArena) return;
             if (broadcastChannel) {
                 const playerData = { id: myPlayerId, name: name, score: 0 };
                 broadcastChannel.postMessage({ type: 'PLAYER_JOIN', arenaId: code, player: playerData });
@@ -3271,7 +3363,7 @@
                     } else if (msg.type === 'MATCH_WON' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleHostReceivedData(msg, null);
                     }
-                } else if (!isTeacherHost && currentArenaId) {
+                } else if (!isTeacherHost && currentArenaId && isStudentInArena) {
                     if (msg.type === 'ARENA_DISMISSED' && (!msg.arenaId || msg.arenaId === currentArenaId)) {
                         handleStudentArenaDismissed();
                     } else if (msg.type === 'PLAYER_KICKED' && msg.playerId === myPlayerId && (!msg.arenaId || msg.arenaId === currentArenaId)) {
@@ -3332,8 +3424,9 @@
         function onArenaDataUpdated(data) {
             if (!data) return;
 
-            // 若學生端收到房間已關閉/解散訊號，無論在等待、比賽中或結算畫面，立即強制退回首頁
+            // 若學生端已退出或被踢除，直接忽略任何殘留或延遲抵達的房間狀態封包
             if (!isTeacherHost) {
+                if (!isStudentInArena || !currentArenaId) return;
                 if (data.status === 'dismissed') {
                     handleStudentArenaDismissed();
                     return;
@@ -3354,6 +3447,7 @@
             arenaState = data;
 
             if (isTeacherHost) {
+                renderRematchPlayers(arenaState.players || {});
                 if (arenaState.status === 'waiting') {
                     renderLobbyPlayers(arenaState.players || {});
                 } else if (arenaState.status === 'countdown') {
@@ -3713,6 +3807,32 @@
             `).join('');
         }
 
+        function renderRematchPlayers(players) {
+            const listContainer = document.getElementById('rematch-player-list');
+            const countElem = document.getElementById('rematch-player-count');
+            if (!listContainer || !countElem) return;
+
+            const pArray = Object.values(players || {});
+            countElem.innerText = pArray.length;
+
+            if (pArray.length === 0) {
+                listContainer.innerHTML = `<div class="text-gray-400 text-center py-8">目前尚無參賽選手</div>`;
+                return;
+            }
+
+            listContainer.innerHTML = pArray.map((p, idx) => `
+                <div class="flex items-center justify-between p-2 bg-indigo-50/50 rounded-xl hover:bg-indigo-50 transition">
+                    <span class="font-bold text-gray-700 truncate max-w-[140px]">${idx + 1}. ${p.name}</span>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="text-[11px] text-emerald-600 font-bold"><i class="fa-solid fa-user-check"></i> 在場</span>
+                        <button onclick="kickLobbyPlayer('${p.id}')" title="移除已離開的選手" class="w-6 h-6 rounded-lg bg-rose-100 hover:bg-rose-500 text-rose-600 hover:text-white flex items-center justify-center transition shadow-sm">
+                            <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
         async function kickLobbyPlayer(playerId) {
             if (!arenaState || !isTeacherHost || !playerId) return;
             const player = arenaState.players ? arenaState.players[playerId] : null;
@@ -3724,8 +3844,11 @@
             if (!arenaState.kickedPlayers) arenaState.kickedPlayers = {};
             arenaState.kickedPlayers[playerId] = true;
 
+            renderRematchPlayers(arenaState.players || {});
             if (arenaState.status === 'waiting') {
                 renderLobbyPlayers(arenaState.players || {});
+            } else if (arenaState.status === 'ended') {
+                renderPodiumAndResults(arenaState);
             } else {
                 renderMonitorBoard(arenaState.players || {});
             }
@@ -3804,6 +3927,7 @@
                 dismissArena();
             } else {
                 // 學生主動離開擂台時完整清理所有背景監聽器與連線
+                isStudentInArena = false;
                 if (kickCheckInterval) {
                     clearInterval(kickCheckInterval);
                     kickCheckInterval = null;
@@ -3989,6 +4113,7 @@
             updateRematchModeOptions();
             document.getElementById('rematch-mode-select').value = arenaState.mode;
             document.getElementById('rematch-enable-speech').checked = arenaState.enableSpeech !== false;
+            renderRematchPlayers(arenaState.players || {});
 
             const modal = document.getElementById('rematch-modal');
             modal.classList.remove('hidden');
